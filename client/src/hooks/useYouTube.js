@@ -9,6 +9,7 @@ export function useYouTube() {
   const [isReady, setIsReady] = useState(false);
   const [isConnected, setIsConnected] = useState(true); // Always connected (no login needed)
   const [isUnlocked, setIsUnlocked] = useState(false);
+  const [needsGesture, setNeedsGesture] = useState(false);
   const [player, setPlayer] = useState(null);
   const [currentTrack, setCurrentTrack] = useState(null);
   const [error, setError] = useState(null);
@@ -70,11 +71,18 @@ export function useYouTube() {
         onReady: () => {
           playerRef.current = ytPlayer;
           setPlayer(ytPlayer);
+          // Ensure the iframe permits programmatic autoplay (needed so listeners
+          // can hear tracks the host starts without clicking each time).
+          try {
+            const iframe = ytPlayer.getIframe && ytPlayer.getIframe();
+            if (iframe) iframe.setAttribute('allow', 'autoplay; encrypted-media');
+          } catch (_) { /* ignore */ }
         },
         onStateChange: (event) => {
           // YT.PlayerState: ENDED=0, PLAYING=1, PAUSED=2, BUFFERING=3, CUED=5
-          if (event.data === 0) {
-            // Track ended
+          if (event.data === 1 || event.data === 3) {
+            // Actually playing/buffering -> no manual tap needed
+            setNeedsGesture(false);
           }
         },
         onError: (event) => {
@@ -106,6 +114,17 @@ export function useYouTube() {
         startSeconds: positionSeconds || 0
       });
       playerRef.current.playVideo();
+      // Verify playback actually started. On listener devices the browser may
+      // block autoplay (no recent user gesture) — if so, ask for a tap.
+      setTimeout(() => {
+        const p = playerRef.current;
+        if (!p || typeof p.getPlayerState !== 'function') return;
+        const st = p.getPlayerState();
+        // 1 = playing, 3 = buffering
+        if (st !== 1 && st !== 3) {
+          setNeedsGesture(true);
+        }
+      }, 1200);
     } catch (err) {
       pendingPlayRef.current = { videoId, positionSeconds };
     }
@@ -225,6 +244,7 @@ export function useYouTube() {
     isReady,
     isConnected,
     isUnlocked,
+    needsGesture,
     currentTrack,
     error,
     playTrack,

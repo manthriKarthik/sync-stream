@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAudioSync } from '../hooks/useAudioSync';
 import { useWebRTC } from '../hooks/useWebRTC';
 import { useSpotify } from '../hooks/useSpotify';
@@ -39,6 +39,18 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
   const spotify = useSpotify();
   const youtube = useYouTube();
   const audius = useAudius();
+
+  // Latest playback state for platform tracks, so a listener "tap to play"
+  // can resume at the correct synced position.
+  const platformStateRef = useRef(null);
+  const computePlatformPosition = (state) => {
+    if (!state) return 0;
+    if (!state.playing) return state.position || 0;
+    const syncedNow = Date.now() + (clockOffset || 0);
+    const anchor = state.syncTime || state.startedAt || syncedNow;
+    const elapsed = Math.max(0, (syncedNow - anchor) / 1000);
+    return (state.position || 0) + elapsed;
+  };
 
   const {
     isStreaming,
@@ -139,25 +151,19 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
       const track = queue[state.trackIndex];
       if (!track) return;
 
-      // Compute the correct playback position accounting for the coordination
-      // buffer / clock offset so late starts still land at the right spot.
-      const computePosition = () => {
-        if (!state.playing) return state.position || 0;
-        const syncedNow = Date.now() + (clockOffset || 0);
-        const anchor = state.syncTime || state.startedAt || syncedNow;
-        const elapsed = Math.max(0, (syncedNow - anchor) / 1000);
-        return (state.position || 0) + elapsed;
-      };
+      // Remember the latest playback state so a listener "tap to play" can
+      // resume at the correct synced position.
+      platformStateRef.current = state;
 
       if (track.platform === 'youtube') {
         if (state.playing) {
-          youtube.playTrack(track.uri, computePosition());
+          youtube.playTrack(track.uri, computePlatformPosition(state));
         } else {
           youtube.pause();
         }
       } else if (track.platform === 'spotify' && spotify.isConnected) {
         if (state.playing) {
-          spotify.playTrack(track.uri, computePosition() * 1000);
+          spotify.playTrack(track.uri, computePlatformPosition(state) * 1000);
         } else {
           spotify.pause();
         }
@@ -297,6 +303,14 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
     setSpotifyActivated(true);
   };
 
+  // Listener tap to start YouTube playback when the browser blocked autoplay.
+  const handleYouTubeTap = () => {
+    const track = queue[currentTrackIndex];
+    if (!track || track.platform !== 'youtube') return;
+    // Runs inside a user gesture, so the browser allows playback with sound.
+    youtube.playTrack(track.uri, computePlatformPosition(platformStateRef.current));
+  };
+
   return (
     <div className="room-layout">
       {!audioEnabled && (
@@ -354,6 +368,31 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
           onClick={handleActivateSpotify}
         >
           🔊 Tap to enable Spotify sound on this device
+        </div>
+      )}
+      {/* YouTube tap-to-play prompt (browser blocked autoplay on this device) */}
+      {audioEnabled && isPlatformTrack && activeTrack?.platform === 'youtube' && youtube.needsGesture && (
+        <div
+          style={{
+            position: 'fixed',
+            bottom: 100,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 9998,
+            background: '#ff0000',
+            color: '#fff',
+            borderRadius: 999,
+            padding: '12px 24px',
+            boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            fontWeight: 600
+          }}
+          onClick={handleYouTubeTap}
+        >
+          ▶ Tap to play the music on this device
         </div>
       )}
       {/* Header */}
