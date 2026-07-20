@@ -1,0 +1,23 @@
+{
+  "name": "sync-stream",
+  "version": "1.0.0",
+  "description": "Multi-listener synchronized audio streaming app",
+  "private": true,
+  "workspaces": ["server", "client"],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:server": "cd server && npm run dev",
+    "dev:client": "cd client && npm run dev",
+    "build": "cd client && npm run build",
+    "start": "cd server && npm start",
+    "share": "powershell -ExecutionPolicy Bypass -File start.ps1",
+    "install:all": "npm install && cd server && npm install && cd ../client && npm install",
+    "render-build": "cd client && npm install && npm run build && cd ../server && npm install"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
