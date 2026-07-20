@@ -165,6 +165,8 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
 
   const handlePlay = () => {
     if (!canControl) return;
+    // Unlock the Spotify SDK audio element on this device (must be in a gesture)
+    spotify.activate();
     socket.emit('playback:play', {
       roomId: roomState.id,
       trackIndex: currentTrackIndex,
@@ -184,11 +186,13 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
 
   const handleNext = () => {
     if (!canControl || queue.length === 0) return;
+    spotify.activate();
     socket.emit('playback:next', { roomId: roomState.id });
   };
 
   const handlePrev = () => {
     if (!canControl || queue.length === 0) return;
+    spotify.activate();
     const prevIndex = currentTrackIndex === 0 ? queue.length - 1 : currentTrackIndex - 1;
     socket.emit('playback:play', {
       roomId: roomState.id,
@@ -199,6 +203,7 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
 
   const handleTrackSelect = (index) => {
     if (!canControl) return;
+    spotify.activate();
     socket.emit('playback:play', {
       roomId: roomState.id,
       trackIndex: index,
@@ -231,6 +236,8 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
     } catch (_) { /* ignore */ }
     // Unlock the YouTube IFrame player (applies any pending synced track)
     youtube.unlock();
+    // Unlock the Spotify SDK audio element if already connected
+    spotify.activate();
     setAudioEnabled(true);
   };
 

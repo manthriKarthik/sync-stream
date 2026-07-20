@@ -93,10 +93,40 @@ export function useSpotify() {
     }
   }, [player]);
 
+  // Activate the Spotify SDK audio element (must be called from a user gesture,
+  // otherwise the browser blocks audio and this device stays silent).
+  const activate = useCallback(async () => {
+    if (player && typeof player.activateElement === 'function') {
+      try {
+        await player.activateElement();
+      } catch (err) {
+        console.warn('Spotify activateElement failed:', err);
+      }
+    }
+  }, [player]);
+
+  // Transfer playback to this SyncStream device so audio comes out here.
+  const transferPlayback = useCallback(async () => {
+    if (!token || !deviceId) return;
+    try {
+      await fetch('https://api.spotify.com/v1/me/player', {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ device_ids: [deviceId], play: false })
+      });
+    } catch (err) {
+      console.warn('Spotify transfer failed:', err);
+    }
+  }, [token, deviceId]);
+
   // Play a specific track by Spotify URI (e.g., "spotify:track:4iV5W9uYEdYUVa79Axb7Rh")
   const playTrack = useCallback(async (spotifyUri, positionMs = 0) => {
     if (!token || !deviceId) return;
 
+    // Make sure this device is the active one before playing
     await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${deviceId}`, {
       method: 'PUT',
       headers: {
@@ -168,6 +198,8 @@ export function useSpotify() {
     error,
     connect,
     disconnect,
+    activate,
+    transferPlayback,
     playTrack,
     pause,
     resume,
