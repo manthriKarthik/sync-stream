@@ -169,17 +169,11 @@ function PlatformConnect({ spotify, youtube, audius, onTrackSelected, canControl
               placeholder="Search Audius for music..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              disabled={!canControl}
             />
-            <button className="btn btn-primary" type="submit" disabled={searching || !canControl}>
+            <button className="btn btn-primary" type="submit" disabled={searching}>
               {searching ? '...' : '🔍'}
             </button>
           </form>
-          {!canControl && (
-            <p style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-              Room is in DJ mode — only host can add tracks. Ask host to switch to Collaborative.
-            </p>
-          )}
         </div>
       )}
 
@@ -199,9 +193,8 @@ function PlatformConnect({ spotify, youtube, audius, onTrackSelected, canControl
               value={youtubeUrl}
               onChange={(e) => setYoutubeUrl(e.target.value)}
               style={{ fontSize: 12 }}
-              disabled={!canControl}
             />
-            <button className="btn btn-secondary" type="submit" style={{ whiteSpace: 'nowrap', fontSize: 12 }} disabled={!canControl}>
+            <button className="btn btn-secondary" type="submit" style={{ whiteSpace: 'nowrap', fontSize: 12 }}>
               + Add
             </button>
           </form>
@@ -216,17 +209,11 @@ function PlatformConnect({ spotify, youtube, audius, onTrackSelected, canControl
               placeholder="Search YouTube for music..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              disabled={!canControl}
             />
-            <button className="btn btn-primary" type="submit" disabled={searching || !canControl}>
+            <button className="btn btn-primary" type="submit" disabled={searching}>
               {searching ? '...' : '🔍'}
             </button>
           </form>
-          {!canControl && (
-            <p style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-              Room is in DJ mode — only host can add tracks. Ask host to switch to Collaborative.
-            </p>
-          )}
         </div>
       )}
 
@@ -248,19 +235,16 @@ function PlatformConnect({ spotify, youtube, audius, onTrackSelected, canControl
                   placeholder="Search Spotify..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  disabled={!canControl}
                 />
-                <button className="btn btn-primary" type="submit" disabled={searching || !canControl}>
+                <button className="btn btn-primary" type="submit" disabled={searching}>
                   {searching ? '...' : '🔍'}
                 </button>
               </form>
-              {!canControl && (
-                <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>
-                  Room is in DJ mode — only host can add tracks. Ask host to switch to Collaborative.
-                </p>
-              )}
-              <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8 }}>
-                ⚠️ Spotify only works on desktop browsers (not mobile)
+              <p style={{ fontSize: 11, color: '#f0ad4e', marginTop: 8, lineHeight: 1.5 }}>
+                ⚠️ Spotify limitation: each device needs its OWN Spotify Premium account.
+                Two devices on the SAME account can't play at once — playback will bounce
+                between them. For group listening on multiple devices, use <b>Audius</b> or
+                <b> YouTube</b> instead (no account needed, plays everywhere at once).
               </p>
             </div>
           ) : (

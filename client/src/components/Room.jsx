@@ -244,9 +244,10 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
 
   // Explicitly activate the Spotify SDK audio element on this device.
   // Needed for listeners who never press Play themselves.
+  // NOTE: we do NOT transfer playback here — on a shared Spotify account that
+  // would steal the stream from the other device and cause playback to bounce.
   const handleActivateSpotify = () => {
     spotify.activate();
-    spotify.transferPlayback();
     setSpotifyActivated(true);
   };
 
