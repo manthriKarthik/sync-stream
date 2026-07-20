@@ -11,8 +11,8 @@ function Queue({ queue, currentIndex, onSelect, onRemove, canControl }) {
 
   const getPlatformIcon = (platform) => {
     switch (platform) {
+      case 'youtube': return '▶';
       case 'spotify': return '🟢';
-      case 'apple': return '🍎';
       default: return '📁';
     }
   };

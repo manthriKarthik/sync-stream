@@ -7,6 +7,7 @@ import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import { YouTube } from 'youtube-sr';
 import { RoomManager } from './rooms.js';
 import { ClockSyncHandler } from './sync.js';
 
@@ -182,6 +183,36 @@ app.post('/api/platforms/spotify/token', async (req, res) => {
   }
 });
 
+// YouTube search using youtube-sr
+app.get('/api/youtube/search', async (req, res) => {
+  const query = req.query.q;
+  if (!query) return res.json({ results: [] });
+
+  try {
+    const videos = await YouTube.search(query + ' music', { limit: 10, type: 'video' });
+    const results = videos.map(video => {
+      const durationSec = Math.floor((video.duration || 0) / 1000);
+      const mins = Math.floor(durationSec / 60);
+      const secs = durationSec % 60;
+      return {
+        id: video.id,
+        uri: video.id,
+        name: video.title || 'Unknown',
+        artist: video.channel?.name || 'Unknown',
+        album: '',
+        albumArt: video.thumbnail?.url || `https://img.youtube.com/vi/${video.id}/mqdefault.jpg`,
+        duration: video.duration || 0,
+        durationText: `${mins}:${secs.toString().padStart(2, '0')}`,
+        platform: 'youtube'
+      };
+    });
+    res.json({ results });
+  } catch (err) {
+    console.error('YouTube search error:', err.message);
+    res.json({ results: [] });
+  }
+});
+
 // Socket.IO handling
 io.on('connection', (socket) => {
   console.log(`Client connected: ${socket.id}`);
@@ -215,6 +246,20 @@ io.on('connection', (socket) => {
     // Notify others
     io.to(roomId).emit('room:member-joined', { id: socket.id, username });
     socket.emit('room:state', roomManager.getRoomState(roomId));
+
+    // If something is already playing, send the current sync state to the new
+    // listener so they can catch up mid-song (with a recalculated position).
+    if (room.playbackState && room.playbackState.playing) {
+      const now = Date.now();
+      const elapsed = (now - room.playbackState.startedAt) / 1000;
+      const syncTime = now + 200; // coordination buffer
+      socket.emit('playback:sync', {
+        ...room.playbackState,
+        position: (room.playbackState.position || 0) + Math.max(0, elapsed),
+        startedAt: syncTime,
+        syncTime
+      });
+    }
   });
 
   socket.on('room:leave', ({ roomId }) => {

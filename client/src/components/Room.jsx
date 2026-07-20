@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAudioSync } from '../hooks/useAudioSync';
 import { useWebRTC } from '../hooks/useWebRTC';
 import { useSpotify } from '../hooks/useSpotify';
-import { useAppleMusic } from '../hooks/useAppleMusic';
+import { useYouTube } from '../hooks/useYouTube';
 import Player from './Player';
 import Queue from './Queue';
 import Members from './Members';
@@ -17,6 +17,7 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
   const [currentTrackIndex, setCurrentTrackIndex] = useState(
     roomState?.playbackState?.trackIndex || 0
   );
+  const [audioEnabled, setAudioEnabled] = useState(false);
 
   const isHost = roomState?.hostId === socket?.id;
 
@@ -34,7 +35,7 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
   } = useAudioSync(socket);
 
   const spotify = useSpotify();
-  const appleMusic = useAppleMusic();
+  const youtube = useYouTube();
 
   const {
     isStreaming,
@@ -128,24 +129,34 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
       const track = queue[state.trackIndex];
       if (!track) return;
 
-      if (track.platform === 'spotify' && spotify.isConnected) {
+      // Compute the correct playback position accounting for the coordination
+      // buffer / clock offset so late starts still land at the right spot.
+      const computePosition = () => {
+        if (!state.playing) return state.position || 0;
+        const syncedNow = Date.now() + (clockOffset || 0);
+        const anchor = state.syncTime || state.startedAt || syncedNow;
+        const elapsed = Math.max(0, (syncedNow - anchor) / 1000);
+        return (state.position || 0) + elapsed;
+      };
+
+      if (track.platform === 'youtube' && youtube.isReady) {
         if (state.playing) {
-          spotify.playTrack(track.uri, state.position * 1000);
+          youtube.playTrack(track.uri, computePosition());
+        } else {
+          youtube.pause();
+        }
+      } else if (track.platform === 'spotify' && spotify.isConnected) {
+        if (state.playing) {
+          spotify.playTrack(track.uri, computePosition() * 1000);
         } else {
           spotify.pause();
-        }
-      } else if (track.platform === 'apple' && appleMusic.isConnected) {
-        if (state.playing) {
-          appleMusic.playTrack(track.uri, state.position);
-        } else {
-          appleMusic.pause();
         }
       }
     };
 
     socket.on('playback:sync', handlePlatformSync);
     return () => socket.off('playback:sync', handlePlatformSync);
-  }, [socket, queue, spotify, appleMusic]);
+  }, [socket, queue, spotify, youtube, clockOffset]);
 
   const canControl = isHost || mode === 'collaborative';
 
@@ -206,8 +217,54 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
     navigator.clipboard.writeText(roomState.id);
   };
 
+  // Enable audio on mobile - must run from a user gesture to satisfy autoplay policies
+  const handleEnableAudio = () => {
+    // Unlock the local <audio> element
+    try {
+      const a = audioRef.current;
+      if (a) {
+        a.play().then(() => a.pause()).catch(() => {});
+      }
+    } catch (_) { /* ignore */ }
+    // Unlock the YouTube IFrame player (applies any pending synced track)
+    youtube.unlock();
+    setAudioEnabled(true);
+  };
+
   return (
     <div className="room-layout">
+      {!audioEnabled && (
+        <div
+          onClick={handleEnableAudio}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 9999,
+            background: 'rgba(10,10,20,0.92)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            textAlign: 'center',
+            padding: 24
+          }}
+        >
+          <div style={{ fontSize: 64, marginBottom: 16 }}>🎧</div>
+          <h2 style={{ margin: '0 0 8px', color: '#fff' }}>Tap to Join Audio</h2>
+          <p style={{ color: 'var(--text-muted)', maxWidth: 320 }}>
+            Your phone requires one tap to allow synced music playback.
+            Tap anywhere to start listening.
+          </p>
+          <button
+            className="btn btn-primary"
+            style={{ marginTop: 20, fontSize: 18, padding: '12px 32px' }}
+            onClick={handleEnableAudio}
+          >
+            ▶ Enable Audio
+          </button>
+        </div>
+      )}
       {/* Header */}
       <div className="room-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -246,7 +303,7 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
       <div className="room-main">
         <PlatformConnect
           spotify={spotify}
-          appleMusic={appleMusic}
+          youtube={youtube}
           onTrackSelected={handlePlatformTrackSelected}
           canControl={canControl}
         />
