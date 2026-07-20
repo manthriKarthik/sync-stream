@@ -129,6 +129,59 @@ app.get('/api/rooms', (req, res) => {
   res.json(roomManager.listRooms());
 });
 
+// Platform configuration endpoint (provides client IDs to frontend securely)
+app.get('/api/platforms/config', (req, res) => {
+  res.json({
+    spotify: {
+      clientId: process.env.SPOTIFY_CLIENT_ID || null,
+      available: !!process.env.SPOTIFY_CLIENT_ID
+    },
+    apple: {
+      developerToken: process.env.APPLE_MUSIC_DEVELOPER_TOKEN || null,
+      available: !!process.env.APPLE_MUSIC_DEVELOPER_TOKEN
+    }
+  });
+});
+
+// Spotify token refresh (exchanges auth code for access token, keeping client secret server-side)
+app.post('/api/platforms/spotify/token', async (req, res) => {
+  const { code, redirectUri } = req.body;
+  const clientId = process.env.SPOTIFY_CLIENT_ID;
+  const clientSecret = process.env.SPOTIFY_CLIENT_SECRET;
+
+  if (!clientId || !clientSecret) {
+    return res.status(503).json({ error: 'Spotify not configured' });
+  }
+
+  try {
+    const response = await fetch('https://accounts.spotify.com/api/token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Authorization': 'Basic ' + Buffer.from(`${clientId}:${clientSecret}`).toString('base64')
+      },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        code,
+        redirect_uri: redirectUri
+      })
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      return res.status(400).json({ error: data.error_description || 'Token exchange failed' });
+    }
+
+    res.json({
+      accessToken: data.access_token,
+      refreshToken: data.refresh_token,
+      expiresIn: data.expires_in
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Token exchange failed' });
+  }
+});
+
 // Socket.IO handling
 io.on('connection', (socket) => {
   console.log(`Client connected: ${socket.id}`);
@@ -254,6 +307,25 @@ io.on('connection', (socket) => {
   });
 
   // Queue management
+  socket.on('queue:add-platform-track', ({ roomId, track }) => {
+    const room = roomManager.getRoom(roomId);
+    if (!room) return;
+    // Add streaming platform track to queue
+    room.queue.push({
+      id: track.id || uuidv4(),
+      name: track.name,
+      artist: track.artist,
+      album: track.album,
+      albumArt: track.albumArt,
+      uri: track.uri,
+      url: null, // No local file URL for platform tracks
+      duration: track.duration,
+      platform: track.platform,
+      addedBy: track.addedBy || 'unknown'
+    });
+    io.to(roomId).emit('queue:updated', room.queue);
+  });
+
   socket.on('queue:reorder', ({ roomId, queue }) => {
     const room = roomManager.getRoom(roomId);
     if (!room) return;

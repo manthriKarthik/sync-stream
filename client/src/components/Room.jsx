@@ -1,11 +1,14 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAudioSync } from '../hooks/useAudioSync';
 import { useWebRTC } from '../hooks/useWebRTC';
+import { useSpotify } from '../hooks/useSpotify';
+import { useAppleMusic } from '../hooks/useAppleMusic';
 import Player from './Player';
 import Queue from './Queue';
 import Members from './Members';
 import Upload from './Upload';
 import LiveCapture from './LiveCapture';
+import PlatformConnect from './PlatformConnect';
 
 function Room({ socket, roomState, setRoomState, username, onLeave }) {
   const [queue, setQueue] = useState(roomState?.queue || []);
@@ -30,6 +33,9 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
     clockOffset
   } = useAudioSync(socket);
 
+  const spotify = useSpotify();
+  const appleMusic = useAppleMusic();
+
   const {
     isStreaming,
     remoteStream,
@@ -37,6 +43,25 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
     stopCapture,
     sendOffer
   } = useWebRTC(socket, roomState?.id, isHost);
+
+  // Handle adding a streaming platform track to the queue
+  const handlePlatformTrackSelected = (track) => {
+    // Add the platform track to the room queue via socket
+    socket.emit('queue:add-platform-track', {
+      roomId: roomState.id,
+      track: {
+        id: track.id,
+        name: track.name,
+        artist: track.artist,
+        album: track.album,
+        albumArt: track.albumArt,
+        uri: track.uri,
+        duration: track.duration,
+        platform: track.platform,
+        addedBy: username
+      }
+    });
+  };
 
   // Listen for room updates
   useEffect(() => {
@@ -82,12 +107,45 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
     };
   }, [socket, isHost, isStreaming, currentTrackIndex, queue]);
 
-  // Load initial track
+  // Load initial track (handles both local and platform tracks)
   useEffect(() => {
     if (queue.length > 0 && queue[currentTrackIndex]) {
-      loadTrack(queue[currentTrackIndex].url);
+      const track = queue[currentTrackIndex];
+      if (track.platform === 'spotify' || track.platform === 'apple') {
+        // Platform tracks are played via their respective SDKs
+        // The sync event will trigger playback on each client
+      } else if (track.url) {
+        loadTrack(track.url);
+      }
     }
   }, [queue, currentTrackIndex, loadTrack]);
+
+  // Handle platform track sync (when server broadcasts play for a platform track)
+  useEffect(() => {
+    if (!socket) return;
+
+    const handlePlatformSync = (state) => {
+      const track = queue[state.trackIndex];
+      if (!track) return;
+
+      if (track.platform === 'spotify' && spotify.isConnected) {
+        if (state.playing) {
+          spotify.playTrack(track.uri, state.position * 1000);
+        } else {
+          spotify.pause();
+        }
+      } else if (track.platform === 'apple' && appleMusic.isConnected) {
+        if (state.playing) {
+          appleMusic.playTrack(track.uri, state.position);
+        } else {
+          appleMusic.pause();
+        }
+      }
+    };
+
+    socket.on('playback:sync', handlePlatformSync);
+    return () => socket.off('playback:sync', handlePlatformSync);
+  }, [socket, queue, spotify, appleMusic]);
 
   const canControl = isHost || mode === 'collaborative';
 
@@ -186,6 +244,13 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
 
       {/* Main content */}
       <div className="room-main">
+        <PlatformConnect
+          spotify={spotify}
+          appleMusic={appleMusic}
+          onTrackSelected={handlePlatformTrackSelected}
+          canControl={canControl}
+        />
+
         <Upload roomId={roomState.id} userId={socket?.id} />
         
         {isHost && (

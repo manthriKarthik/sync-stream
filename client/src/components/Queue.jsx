@@ -4,10 +4,18 @@ function Queue({ queue, currentIndex, onSelect, onRemove, canControl }) {
       <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>
         <p style={{ fontSize: 32, marginBottom: 12 }}>🎶</p>
         <p>No tracks in queue yet.</p>
-        <p style={{ fontSize: 12 }}>Upload audio files or start live capture to begin.</p>
+        <p style={{ fontSize: 12 }}>Upload audio files, connect Spotify/Apple Music, or start live capture.</p>
       </div>
     );
   }
+
+  const getPlatformIcon = (platform) => {
+    switch (platform) {
+      case 'spotify': return '🟢';
+      case 'apple': return '🍎';
+      default: return '📁';
+    }
+  };
 
   return (
     <ul className="queue-list">
@@ -20,9 +28,20 @@ function Queue({ queue, currentIndex, onSelect, onRemove, canControl }) {
           <span className="track-num">
             {index === currentIndex ? '▶' : index + 1}
           </span>
+          {track.albumArt && (
+            <img
+              src={track.albumArt}
+              alt=""
+              style={{ width: 36, height: 36, borderRadius: 4, objectFit: 'cover' }}
+            />
+          )}
           <div className="track-info">
-            <div className="name">{track.name}</div>
-            <div className="added-by">Added by {track.addedBy}</div>
+            <div className="name">
+              {getPlatformIcon(track.platform)} {track.name}
+            </div>
+            <div className="added-by">
+              {track.artist ? `${track.artist} • ` : ''}Added by {track.addedBy}
+            </div>
           </div>
           {canControl && (
             <button

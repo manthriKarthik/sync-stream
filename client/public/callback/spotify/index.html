@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+<head><title>Spotify Auth</title></head>
+<body>
+<script>
+  // Extract token from URL hash (Spotify implicit grant flow)
+  const hash = window.location.hash.substring(1);
+  const params = new URLSearchParams(hash);
+  const token = params.get('access_token');
+
+  if (token && window.opener) {
+    window.opener.postMessage({ type: 'spotify-token', token }, '*');
+  }
+
+  window.close();
+</script>
+<p>Connecting to Spotify... This window will close automatically.</p>
+</body>
+</html>
