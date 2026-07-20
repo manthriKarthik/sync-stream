@@ -168,7 +168,47 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
     return () => socket.off('playback:sync', handlePlatformSync);
   }, [socket, queue, spotify, youtube, clockOffset]);
 
+  // Poll the active platform player so the progress bar keeps moving for
+  // YouTube/Spotify tracks (they don't use the shared <audio> element).
+  const [platformProgress, setPlatformProgress] = useState({ time: 0, duration: 0 });
+  useEffect(() => {
+    const track = queue[currentTrackIndex];
+    if (!track) return;
+
+    let cancelled = false;
+    let intervalId;
+
+    if (track.platform === 'youtube') {
+      intervalId = setInterval(() => {
+        const t = youtube.getPosition();
+        const d = youtube.getDuration();
+        setPlatformProgress({
+          time: t || 0,
+          duration: d || (track.duration ? track.duration / 1000 : 0)
+        });
+      }, 250);
+    } else if (track.platform === 'spotify') {
+      intervalId = setInterval(async () => {
+        const t = await spotify.getPosition();
+        if (cancelled) return;
+        setPlatformProgress({
+          time: (t || 0) / 1000,
+          duration: track.duration ? track.duration / 1000 : 0
+        });
+      }, 500);
+    }
+
+    return () => {
+      cancelled = true;
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [queue, currentTrackIndex, youtube, spotify]);
+
   const canControl = isHost || mode === 'collaborative';
+
+  // YouTube/Spotify tracks report progress via their own players, not the shared <audio>
+  const activeTrack = queue[currentTrackIndex] || null;
+  const isPlatformTrack = activeTrack?.platform === 'youtube' || activeTrack?.platform === 'spotify';
 
   const handlePlay = () => {
     if (!canControl) return;
@@ -388,8 +428,8 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
       {/* Player bar */}
       <Player
         isPlaying={isPlaying}
-        currentTime={currentTime}
-        duration={duration}
+        currentTime={isPlatformTrack ? platformProgress.time : currentTime}
+        duration={isPlatformTrack ? platformProgress.duration : duration}
         currentTrack={queue[currentTrackIndex] || null}
         onPlay={handlePlay}
         onPause={handlePause}

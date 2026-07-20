@@ -73,12 +73,44 @@ function Player({ isPlaying, currentTime, duration, currentTrack, onPlay, onPaus
   return (
     <div className="player-bar">
       {/* Track info */}
-      <div className="player-track-info">
-        <div className="track-name">
-          {currentTrack ? currentTrack.name : 'No track loaded'}
-        </div>
-        <div className="track-artist">
-          {currentTrack ? `Added by ${currentTrack.addedBy}` : 'Add music to the queue'}
+      <div className="player-track-info" style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+        {currentTrack?.albumArt ? (
+          <img
+            src={currentTrack.albumArt}
+            alt=""
+            style={{
+              width: 52,
+              height: 52,
+              borderRadius: 10,
+              objectFit: 'cover',
+              flexShrink: 0,
+              boxShadow: '0 2px 8px rgba(0,0,0,0.4)'
+            }}
+          />
+        ) : (
+          <div style={{
+            width: 52,
+            height: 52,
+            borderRadius: 10,
+            flexShrink: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: 24,
+            background: 'linear-gradient(135deg, #2a2a3a, #1a1a24)'
+          }}>
+            🎵
+          </div>
+        )}
+        <div style={{ minWidth: 0 }}>
+          <div className="track-name" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {currentTrack ? currentTrack.name : 'No track loaded'}
+          </div>
+          <div className="track-artist" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {currentTrack
+              ? (currentTrack.artist || `Added by ${currentTrack.addedBy}`)
+              : 'Add music to the queue'}
+          </div>
         </div>
       </div>
 
@@ -119,11 +151,39 @@ function Player({ isPlaying, currentTime, duration, currentTrack, onPlay, onPaus
           className="progress-bar"
           ref={progressRef}
           onClick={handleProgressClick}
+          style={{
+            position: 'relative',
+            flex: 1,
+            height: 6,
+            background: 'rgba(255,255,255,0.15)',
+            borderRadius: 999,
+            cursor: canControl ? 'pointer' : 'default',
+            overflow: 'visible'
+          }}
         >
           <div
             className="progress-fill"
-            style={{ width: `${progress}%` }}
-          />
+            style={{
+              width: `${progress}%`,
+              height: '100%',
+              borderRadius: 999,
+              background: 'linear-gradient(90deg, #1db954, #1ed760)',
+              transition: 'width 0.2s linear',
+              position: 'relative'
+            }}
+          >
+            <div style={{
+              position: 'absolute',
+              right: -6,
+              top: '50%',
+              transform: 'translateY(-50%)',
+              width: 12,
+              height: 12,
+              borderRadius: '50%',
+              background: '#fff',
+              boxShadow: '0 0 6px rgba(0,0,0,0.5)'
+            }} />
+          </div>
         </div>
         <span className="time">{formatTime(duration)}</span>
       </div>
