@@ -12,9 +12,6 @@ import { YouTube } from 'youtube-sr';
 import { RoomManager } from './rooms.js';
 import { ClockSyncHandler } from './sync.js';
 
-// Debug: Log env vars on startup (remove after debugging)
-console.log('ENV CHECK: SPOTIFY_CLIENT_ID =', process.env.SPOTIFY_CLIENT_ID ? 'SET' : 'NOT SET');
-
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const server = createServer(app);

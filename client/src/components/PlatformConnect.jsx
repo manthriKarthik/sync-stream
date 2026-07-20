@@ -34,8 +34,9 @@ function PlatformConnect({ spotify, youtube, audius, onTrackSelected, canControl
 
   const handleSelectTrack = (track) => {
     onTrackSelected(track);
-    setSearchResults([]);
-    setSearchQuery('');
+    // Keep search results visible so user can add more songs
+    // Don't clear: setSearchResults([]);
+    // Don't clear: setSearchQuery('');
   };
 
   // Add YouTube track by URL
@@ -161,22 +162,22 @@ function PlatformConnect({ spotify, youtube, audius, onTrackSelected, canControl
           <p style={{ fontSize: 12, color: 'var(--success)', marginBottom: 12 }}>
             ✓ Free • full songs • no login • perfectly synced
           </p>
-          {canControl ? (
-            <form onSubmit={handleSearch} style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-              <input
-                className="input"
-                type="text"
-                placeholder="Search Audius for music..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-              <button className="btn btn-primary" type="submit" disabled={searching}>
-                {searching ? '...' : '🔍'}
-              </button>
-            </form>
-          ) : (
-            <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-              Only the host can add tracks in this mode.
+          <form onSubmit={handleSearch} style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+            <input
+              className="input"
+              type="text"
+              placeholder="Search Audius for music..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              disabled={!canControl}
+            />
+            <button className="btn btn-primary" type="submit" disabled={searching || !canControl}>
+              {searching ? '...' : '🔍'}
+            </button>
+          </form>
+          {!canControl && (
+            <p style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+              Room is in DJ mode — only host can add tracks. Ask host to switch to Collaborative.
             </p>
           )}
         </div>
@@ -198,8 +199,9 @@ function PlatformConnect({ spotify, youtube, audius, onTrackSelected, canControl
               value={youtubeUrl}
               onChange={(e) => setYoutubeUrl(e.target.value)}
               style={{ fontSize: 12 }}
+              disabled={!canControl}
             />
-            <button className="btn btn-secondary" type="submit" style={{ whiteSpace: 'nowrap', fontSize: 12 }}>
+            <button className="btn btn-secondary" type="submit" style={{ whiteSpace: 'nowrap', fontSize: 12 }} disabled={!canControl}>
               + Add
             </button>
           </form>
@@ -207,19 +209,23 @@ function PlatformConnect({ spotify, youtube, audius, onTrackSelected, canControl
           <div className="divider">or search</div>
 
           {/* Search */}
-          {canControl && (
-            <form onSubmit={handleSearch} style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-              <input
-                className="input"
-                type="text"
-                placeholder="Search YouTube for music..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-              <button className="btn btn-primary" type="submit" disabled={searching}>
-                {searching ? '...' : '🔍'}
-              </button>
-            </form>
+          <form onSubmit={handleSearch} style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+            <input
+              className="input"
+              type="text"
+              placeholder="Search YouTube for music..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              disabled={!canControl}
+            />
+            <button className="btn btn-primary" type="submit" disabled={searching || !canControl}>
+              {searching ? '...' : '🔍'}
+            </button>
+          </form>
+          {!canControl && (
+            <p style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+              Room is in DJ mode — only host can add tracks. Ask host to switch to Collaborative.
+            </p>
           )}
         </div>
       )}
@@ -235,20 +241,27 @@ function PlatformConnect({ spotify, youtube, audius, onTrackSelected, canControl
                   Disconnect
                 </button>
               </div>
-              {canControl && (
-                <form onSubmit={handleSearch} style={{ display: 'flex', gap: 8 }}>
-                  <input
-                    className="input"
-                    type="text"
-                    placeholder="Search Spotify..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                  />
-                  <button className="btn btn-primary" type="submit" disabled={searching}>
-                    {searching ? '...' : '🔍'}
-                  </button>
-                </form>
+              <form onSubmit={handleSearch} style={{ display: 'flex', gap: 8 }}>
+                <input
+                  className="input"
+                  type="text"
+                  placeholder="Search Spotify..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  disabled={!canControl}
+                />
+                <button className="btn btn-primary" type="submit" disabled={searching || !canControl}>
+                  {searching ? '...' : '🔍'}
+                </button>
+              </form>
+              {!canControl && (
+                <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>
+                  Room is in DJ mode — only host can add tracks. Ask host to switch to Collaborative.
+                </p>
               )}
+              <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8 }}>
+                ⚠️ Spotify only works on desktop browsers (not mobile)
+              </p>
             </div>
           ) : (
             <div>
