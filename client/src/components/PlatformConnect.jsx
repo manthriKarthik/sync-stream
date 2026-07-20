@@ -60,16 +60,38 @@ function PlatformConnect({ spotify, youtube, audius, onTrackSelected, canControl
     }
   };
 
-  // Spotify login
-  const handleSpotifyLogin = () => {
+  // Spotify login using Authorization Code + PKCE (required by Spotify for new apps)
+  const handleSpotifyLogin = async () => {
     const clientId = window.__SPOTIFY_CLIENT_ID;
     if (!clientId) {
       alert('Spotify Client ID not configured. Ask the room host to set it up.');
       return;
     }
+
+    // Generate PKCE code verifier (random 64-char string)
+    const generateVerifier = () => {
+      const arr = new Uint8Array(64);
+      crypto.getRandomValues(arr);
+      return Array.from(arr, b => 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'[b % 62]).join('');
+    };
+
+    // SHA-256 hash, base64url encoded
+    const generateChallenge = async (verifier) => {
+      const data = new TextEncoder().encode(verifier);
+      const hash = await crypto.subtle.digest('SHA-256', data);
+      return btoa(String.fromCharCode(...new Uint8Array(hash)))
+        .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    };
+
+    const codeVerifier = generateVerifier();
+    const codeChallenge = await generateChallenge(codeVerifier);
+
+    // Store verifier for the callback to use
+    sessionStorage.setItem('spotify_code_verifier', codeVerifier);
+
     const redirectUri = `${window.location.origin}/callback/spotify`;
     const scopes = 'streaming user-read-email user-read-private user-modify-playback-state';
-    const authUrl = `https://accounts.spotify.com/authorize?client_id=${clientId}&response_type=token&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scopes)}`;
+    const authUrl = `https://accounts.spotify.com/authorize?client_id=${clientId}&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scopes)}&code_challenge_method=S256&code_challenge=${codeChallenge}`;
     
     const popup = window.open(authUrl, 'spotify-auth', 'width=500,height=700');
     window.addEventListener('message', (event) => {

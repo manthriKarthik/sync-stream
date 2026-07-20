@@ -147,30 +147,32 @@ app.get('/api/platforms/config', (req, res) => {
 
 // Spotify token refresh (exchanges auth code for access token, keeping client secret server-side)
 app.post('/api/platforms/spotify/token', async (req, res) => {
-  const { code, redirectUri } = req.body;
+  const { code, redirectUri, codeVerifier } = req.body;
   const clientId = process.env.SPOTIFY_CLIENT_ID;
-  const clientSecret = process.env.SPOTIFY_CLIENT_SECRET;
 
-  if (!clientId || !clientSecret) {
+  if (!clientId) {
     return res.status(503).json({ error: 'Spotify not configured' });
   }
 
   try {
+    // PKCE flow: use code_verifier instead of client_secret
     const response = await fetch('https://accounts.spotify.com/api/token', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Authorization': 'Basic ' + Buffer.from(`${clientId}:${clientSecret}`).toString('base64')
+        'Content-Type': 'application/x-www-form-urlencoded'
       },
       body: new URLSearchParams({
         grant_type: 'authorization_code',
         code,
-        redirect_uri: redirectUri
+        redirect_uri: redirectUri,
+        client_id: clientId,
+        code_verifier: codeVerifier
       })
     });
 
     const data = await response.json();
     if (!response.ok) {
+      console.error('Spotify token error:', data);
       return res.status(400).json({ error: data.error_description || 'Token exchange failed' });
     }
 
@@ -180,6 +182,7 @@ app.post('/api/platforms/spotify/token', async (req, res) => {
       expiresIn: data.expires_in
     });
   } catch (err) {
+    console.error('Spotify token exchange error:', err.message);
     res.status(500).json({ error: 'Token exchange failed' });
   }
 });

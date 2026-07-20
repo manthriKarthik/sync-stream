@@ -3,17 +3,60 @@
 <head><title>Spotify Auth</title></head>
 <body>
 <script>
-  // Extract token from URL hash (Spotify implicit grant flow)
-  const hash = window.location.hash.substring(1);
-  const params = new URLSearchParams(hash);
-  const token = params.get('access_token');
+  // Spotify Authorization Code + PKCE flow
+  (async () => {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('code');
+    const error = params.get('error');
 
-  if (token && window.opener) {
-    window.opener.postMessage({ type: 'spotify-token', token }, '*');
-  }
+    if (error) {
+      alert('Spotify login failed: ' + error);
+      window.close();
+      return;
+    }
 
-  window.close();
+    if (!code) {
+      document.body.innerText = 'No authorization code received.';
+      return;
+    }
+
+    // Get the code verifier stored by the parent window
+    const codeVerifier = window.opener?.sessionStorage?.getItem('spotify_code_verifier');
+    if (!codeVerifier) {
+      document.body.innerText = 'Code verifier missing. Please try logging in again.';
+      return;
+    }
+
+    document.body.innerText = 'Exchanging code for token...';
+
+    try {
+      // Exchange code for access token via our server (keeps client_secret secure)
+      const res = await fetch('/api/platforms/spotify/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code,
+          redirectUri: window.location.origin + '/callback/spotify',
+          codeVerifier
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.accessToken) {
+        throw new Error(data.error || 'Token exchange failed');
+      }
+
+      // Send token back to parent window
+      if (window.opener) {
+        window.opener.postMessage({ type: 'spotify-token', token: data.accessToken }, '*');
+        window.opener.sessionStorage.removeItem('spotify_code_verifier');
+      }
+      window.close();
+    } catch (err) {
+      document.body.innerText = 'Error: ' + err.message;
+    }
+  })();
 </script>
-<p>Connecting to Spotify... This window will close automatically.</p>
+<p>Connecting to Spotify...</p>
 </body>
 </html>
