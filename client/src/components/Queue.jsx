@@ -13,6 +13,7 @@ function Queue({ queue, currentIndex, onSelect, onRemove, canControl }) {
     switch (platform) {
       case 'youtube': return '▶';
       case 'spotify': return '🟢';
+      case 'audius': return '🎧';
       default: return '📁';
     }
   };

@@ -3,6 +3,7 @@ import { useAudioSync } from '../hooks/useAudioSync';
 import { useWebRTC } from '../hooks/useWebRTC';
 import { useSpotify } from '../hooks/useSpotify';
 import { useYouTube } from '../hooks/useYouTube';
+import { useAudius } from '../hooks/useAudius';
 import Player from './Player';
 import Queue from './Queue';
 import Members from './Members';
@@ -36,6 +37,7 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
 
   const spotify = useSpotify();
   const youtube = useYouTube();
+  const audius = useAudius();
 
   const {
     isStreaming,
@@ -57,6 +59,7 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
         album: track.album,
         albumArt: track.albumArt,
         uri: track.uri,
+        url: track.url || null, // Audius provides a direct stream URL
         duration: track.duration,
         platform: track.platform,
         addedBy: username
@@ -304,6 +307,7 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
         <PlatformConnect
           spotify={spotify}
           youtube={youtube}
+          audius={audius}
           onTrackSelected={handlePlatformTrackSelected}
           canControl={canControl}
         />

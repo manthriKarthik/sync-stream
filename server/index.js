@@ -7,6 +7,7 @@ import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import 'dotenv/config';
 import { YouTube } from 'youtube-sr';
 import { RoomManager } from './rooms.js';
 import { ClockSyncHandler } from './sync.js';
@@ -213,6 +214,84 @@ app.get('/api/youtube/search', async (req, res) => {
   }
 });
 
+// --- Audius (free, full-song streaming, no login) ---
+let audiusHostCache = null;
+let audiusHostCacheTime = 0;
+const AUDIUS_APP = 'SyncStream';
+
+async function getAudiusHost() {
+  // Cache the discovered host for 10 minutes
+  if (audiusHostCache && Date.now() - audiusHostCacheTime < 10 * 60 * 1000) {
+    return audiusHostCache;
+  }
+  const res = await fetch('https://api.audius.co');
+  const data = await res.json();
+  const hosts = data?.data || [];
+  if (!hosts.length) throw new Error('No Audius hosts available');
+  audiusHostCache = hosts[Math.floor(Math.random() * hosts.length)];
+  audiusHostCacheTime = Date.now();
+  return audiusHostCache;
+}
+
+function mapAudiusTrack(track, host) {
+  const durationSec = track.duration || 0;
+  const mins = Math.floor(durationSec / 60);
+  const secs = durationSec % 60;
+  const artwork = track.artwork?.['480x480'] || track.artwork?.['150x150'] || '';
+  return {
+    id: track.id,
+    uri: track.id,
+    name: track.title || 'Unknown',
+    artist: track.user?.name || 'Unknown',
+    album: '',
+    albumArt: artwork,
+    // Direct stream URL — plays in the <audio> element like a local file,
+    // so it gets full drift-corrected sync.
+    url: `${host}/v1/tracks/${track.id}/stream?app_name=${AUDIUS_APP}`,
+    duration: durationSec * 1000,
+    durationText: `${mins}:${secs.toString().padStart(2, '0')}`,
+    platform: 'audius'
+  };
+}
+
+app.get('/api/audius/search', async (req, res) => {
+  const query = req.query.q;
+  if (!query) return res.json({ results: [] });
+
+  try {
+    const host = await getAudiusHost();
+    const url = `${host}/v1/tracks/search?query=${encodeURIComponent(query)}&app_name=${AUDIUS_APP}`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`Audius search failed: ${response.status}`);
+    const data = await response.json();
+    const tracks = (data?.data || []).filter(t => t.is_streamable !== false).slice(0, 12);
+    const results = tracks.map(t => mapAudiusTrack(t, host));
+    res.json({ results });
+  } catch (err) {
+    console.error('Audius search error:', err.message);
+    // Retry once with a fresh host on next call
+    audiusHostCache = null;
+    res.json({ results: [] });
+  }
+});
+
+// Trending Audius tracks (nice default content when search is empty)
+app.get('/api/audius/trending', async (req, res) => {
+  try {
+    const host = await getAudiusHost();
+    const response = await fetch(`${host}/v1/tracks/trending?app_name=${AUDIUS_APP}`);
+    if (!response.ok) throw new Error(`Audius trending failed: ${response.status}`);
+    const data = await response.json();
+    const tracks = (data?.data || []).filter(t => t.is_streamable !== false).slice(0, 12);
+    res.json({ results: tracks.map(t => mapAudiusTrack(t, host)) });
+  } catch (err) {
+    console.error('Audius trending error:', err.message);
+    audiusHostCache = null;
+    res.json({ results: [] });
+  }
+});
+
+
 // Socket.IO handling
 io.on('connection', (socket) => {
   console.log(`Client connected: ${socket.id}`);
@@ -363,7 +442,7 @@ io.on('connection', (socket) => {
       album: track.album,
       albumArt: track.albumArt,
       uri: track.uri,
-      url: null, // No local file URL for platform tracks
+      url: track.url || null, // Audius provides a direct stream URL; Spotify/YT don't
       duration: track.duration,
       platform: track.platform,
       addedBy: track.addedBy || 'unknown'

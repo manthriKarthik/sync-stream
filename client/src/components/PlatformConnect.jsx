@@ -1,10 +1,10 @@
 import { useState, useCallback } from 'react';
 
-function PlatformConnect({ spotify, youtube, onTrackSelected, canControl }) {
+function PlatformConnect({ spotify, youtube, audius, onTrackSelected, canControl }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
-  const [activeTab, setActiveTab] = useState('youtube');
+  const [activeTab, setActiveTab] = useState('audius');
   const [showPanel, setShowPanel] = useState(false);
   const [youtubeUrl, setYoutubeUrl] = useState('');
 
@@ -17,7 +17,9 @@ function PlatformConnect({ spotify, youtube, onTrackSelected, canControl }) {
 
     try {
       let results = [];
-      if (activeTab === 'youtube') {
+      if (activeTab === 'audius') {
+        results = await audius.searchTracks(searchQuery);
+      } else if (activeTab === 'youtube') {
         results = await youtube.searchTracks(searchQuery);
       } else if (activeTab === 'spotify' && spotify.isConnected) {
         results = await spotify.searchTracks(searchQuery);
@@ -28,7 +30,7 @@ function PlatformConnect({ spotify, youtube, onTrackSelected, canControl }) {
     } finally {
       setSearching(false);
     }
-  }, [searchQuery, activeTab, spotify, youtube]);
+  }, [searchQuery, activeTab, spotify, youtube, audius]);
 
   const handleSelectTrack = (track) => {
     onTrackSelected(track);
@@ -85,7 +87,7 @@ function PlatformConnect({ spotify, youtube, onTrackSelected, canControl }) {
         onClick={() => setShowPanel(true)}
         style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}
       >
-        🎵 Search Music (YouTube / Spotify)
+        🎵 Search Music (Audius / YouTube / Spotify)
       </button>
     );
   }
@@ -112,6 +114,12 @@ function PlatformConnect({ spotify, youtube, onTrackSelected, canControl }) {
       {/* Platform tabs */}
       <div className="mode-toggle" style={{ marginBottom: 16 }}>
         <button
+          className={activeTab === 'audius' ? 'active' : ''}
+          onClick={() => setActiveTab('audius')}
+        >
+          🎧 Audius
+        </button>
+        <button
           className={activeTab === 'youtube' ? 'active' : ''}
           onClick={() => setActiveTab('youtube')}
         >
@@ -124,6 +132,33 @@ function PlatformConnect({ spotify, youtube, onTrackSelected, canControl }) {
           🟢 Spotify
         </button>
       </div>
+
+      {/* Audius - free, full songs, best sync */}
+      {activeTab === 'audius' && (
+        <div>
+          <p style={{ fontSize: 12, color: 'var(--success)', marginBottom: 12 }}>
+            ✓ Free • full songs • no login • perfectly synced
+          </p>
+          {canControl ? (
+            <form onSubmit={handleSearch} style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+              <input
+                className="input"
+                type="text"
+                placeholder="Search Audius for music..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              <button className="btn btn-primary" type="submit" disabled={searching}>
+                {searching ? '...' : '🔍'}
+              </button>
+            </form>
+          ) : (
+            <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+              Only the host can add tracks in this mode.
+            </p>
+          )}
+        </div>
+      )}
 
       {/* YouTube - always available */}
       {activeTab === 'youtube' && (
