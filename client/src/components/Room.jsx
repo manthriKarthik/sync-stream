@@ -19,6 +19,7 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
     roomState?.playbackState?.trackIndex || 0
   );
   const [audioEnabled, setAudioEnabled] = useState(false);
+  const [spotifyActivated, setSpotifyActivated] = useState(false);
 
   const isHost = roomState?.hostId === socket?.id;
 
@@ -241,6 +242,14 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
     setAudioEnabled(true);
   };
 
+  // Explicitly activate the Spotify SDK audio element on this device.
+  // Needed for listeners who never press Play themselves.
+  const handleActivateSpotify = () => {
+    spotify.activate();
+    spotify.transferPlayback();
+    setSpotifyActivated(true);
+  };
+
   return (
     <div className="room-layout">
       {!audioEnabled && (
@@ -273,6 +282,31 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
           >
             ▶ Enable Audio
           </button>
+        </div>
+      )}
+      {/* Spotify device activation prompt (each device must be unlocked by a tap) */}
+      {audioEnabled && spotify.isConnected && !spotifyActivated && (
+        <div
+          style={{
+            position: 'fixed',
+            bottom: 100,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 9998,
+            background: '#1db954',
+            color: '#fff',
+            borderRadius: 999,
+            padding: '12px 24px',
+            boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            fontWeight: 600
+          }}
+          onClick={handleActivateSpotify}
+        >
+          🔊 Tap to enable Spotify sound on this device
         </div>
       )}
       {/* Header */}
