@@ -94,18 +94,37 @@ export function useYouTube() {
   // Play a video by YouTube video ID
   const playTrack = useCallback((videoId, positionSeconds = 0) => {
     setError(null);
-    // If the player isn't ready or audio hasn't been unlocked by a user gesture
-    // (required on mobile), remember what to play and apply it on unlock.
-    if (!playerRef.current || !unlockedRef.current) {
+    // If the player instance isn't ready yet, remember what to play and apply
+    // it as soon as the player initializes (see the effect below).
+    if (!playerRef.current) {
       pendingPlayRef.current = { videoId, positionSeconds };
       return;
     }
-    playerRef.current.loadVideoById({
-      videoId,
-      startSeconds: positionSeconds
-    });
-    playerRef.current.playVideo();
+    try {
+      playerRef.current.loadVideoById({
+        videoId,
+        startSeconds: positionSeconds || 0
+      });
+      playerRef.current.playVideo();
+    } catch (err) {
+      pendingPlayRef.current = { videoId, positionSeconds };
+    }
   }, []);
+
+  // Apply any queued track once the player instance becomes ready.
+  useEffect(() => {
+    if (!player || !playerRef.current) return;
+    const pending = pendingPlayRef.current;
+    if (!pending) return;
+    pendingPlayRef.current = null;
+    try {
+      playerRef.current.loadVideoById({
+        videoId: pending.videoId,
+        startSeconds: pending.positionSeconds || 0
+      });
+      playerRef.current.playVideo();
+    } catch (_) { /* ignore */ }
+  }, [player]);
 
   // Unlock playback on a user gesture (required by mobile autoplay policies).
   // Must be called synchronously from within a click/touch handler.

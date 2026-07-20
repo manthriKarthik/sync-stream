@@ -91,7 +91,13 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
     const handlePlaybackSync = (state) => {
       if (state.trackIndex !== currentTrackIndex && queue[state.trackIndex]) {
         setCurrentTrackIndex(state.trackIndex);
-        loadTrack(queue[state.trackIndex].url);
+        const nextTrack = queue[state.trackIndex];
+        // Only feed the shared <audio> engine for direct-URL tracks (Audius /
+        // uploads). YouTube/Spotify play through their own SDKs and must NOT
+        // pollute the shared audio element or they interfere with each other.
+        if (nextTrack.url && nextTrack.platform !== 'youtube' && nextTrack.platform !== 'spotify') {
+          loadTrack(nextTrack.url);
+        }
       }
     };
 
@@ -143,7 +149,7 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
         return (state.position || 0) + elapsed;
       };
 
-      if (track.platform === 'youtube' && youtube.isReady) {
+      if (track.platform === 'youtube') {
         if (state.playing) {
           youtube.playTrack(track.uri, computePosition());
         } else {
