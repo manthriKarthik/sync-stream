@@ -23,6 +23,15 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
 
   const isHost = roomState?.hostId === socket?.id;
 
+  // When a track finishes, only the HOST advances the queue. If every listener
+  // emitted "next", 3+ people would skip multiple songs at once. The server
+  // wraps back to the first track when the queue ends.
+  const handleTrackEnded = useCallback(() => {
+    if (!isHost) return;
+    if (!socket || !roomState?.id) return;
+    socket.emit('playback:next', { roomId: roomState.id });
+  }, [isHost, socket, roomState?.id]);
+
   const {
     audioRef,
     isPlaying,
@@ -34,10 +43,10 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
     seek,
     setVolume,
     clockOffset
-  } = useAudioSync(socket);
+  } = useAudioSync(socket, handleTrackEnded);
 
   const spotify = useSpotify();
-  const youtube = useYouTube();
+  const youtube = useYouTube(handleTrackEnded);
   const audius = useAudius();
 
   // Latest playback state for platform tracks, so a listener "tap to play"
@@ -215,6 +224,27 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
       if (intervalId) clearInterval(intervalId);
     };
   }, [queue, currentTrackIndex, youtube, spotify]);
+
+  // Keep YouTube aligned across devices. YouTube players start slightly apart
+  // and drift over time, so periodically re-seek to the synced position when
+  // the gap grows past ~1s. This reduces the latency between listeners.
+  useEffect(() => {
+    const track = queue[currentTrackIndex];
+    if (!track || track.platform !== 'youtube') return;
+
+    const id = setInterval(() => {
+      const state = platformStateRef.current;
+      if (!state || !state.playing) return;
+      const expected = computePlatformPosition(state);
+      const actual = youtube.getPosition();
+      if (typeof actual !== 'number' || actual <= 0) return;
+      if (Math.abs(expected - actual) > 1.0) {
+        youtube.seek(expected);
+      }
+    }, 3000);
+
+    return () => clearInterval(id);
+  }, [queue, currentTrackIndex, youtube]);
 
   const canControl = isHost || mode === 'collaborative';
 

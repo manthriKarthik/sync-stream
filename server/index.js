@@ -420,6 +420,7 @@ io.on('connection', (socket) => {
     const room = roomManager.getRoom(roomId);
     if (!room) return;
     if (room.hostId !== socket.id && room.mode !== 'collaborative') return;
+    if (!room.queue || room.queue.length === 0) return;
 
     const nextIndex = (room.playbackState.trackIndex + 1) % room.queue.length;
     const syncTime = Date.now() + 100;

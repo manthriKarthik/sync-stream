@@ -9,8 +9,10 @@ import { useEffect, useRef, useState, useCallback } from 'react';
  * - Continuous drift correction every 2 seconds
  * - Smooth seek (avoids audible jumps for small drifts)
  */
-export function useAudioSync(socket) {
+export function useAudioSync(socket, onEnded) {
   const audioRef = useRef(new Audio());
+  const onEndedRef = useRef(onEnded);
+  onEndedRef.current = onEnded;
   const [clockOffset, setClockOffset] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -186,10 +188,9 @@ export function useAudioSync(socket) {
 
     const handleEnded = () => {
       setIsPlaying(false);
-      // Auto-advance to next track
-      if (socket) {
-        socket.emit('playback:next', { roomId: playbackStateRef.current?.roomId });
-      }
+      // Let the Room decide how to advance (host-only, with the correct roomId).
+      // The server wraps back to the first track when the queue finishes.
+      onEndedRef.current?.();
     };
 
     audio.addEventListener('loadedmetadata', handleLoadedMetadata);

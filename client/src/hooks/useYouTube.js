@@ -5,7 +5,9 @@ import { useEffect, useRef, useState, useCallback } from 'react';
  * Plays audio from YouTube videos (music videos, lyric videos, etc.)
  * Free, no subscription needed — works for everyone.
  */
-export function useYouTube() {
+export function useYouTube(onEnded) {
+  const onEndedRef = useRef(onEnded);
+  onEndedRef.current = onEnded;
   const [isReady, setIsReady] = useState(false);
   const [isConnected, setIsConnected] = useState(true); // Always connected (no login needed)
   const [isUnlocked, setIsUnlocked] = useState(false);
@@ -83,6 +85,9 @@ export function useYouTube() {
           if (event.data === 1 || event.data === 3) {
             // Actually playing/buffering -> no manual tap needed
             setNeedsGesture(false);
+          } else if (event.data === 0) {
+            // Track finished — notify the Room so the host advances the queue.
+            onEndedRef.current?.();
           }
         },
         onError: (event) => {
