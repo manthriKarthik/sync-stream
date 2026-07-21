@@ -25,6 +25,25 @@ function Landing({ onCreateRoom, onJoinRoom, connected }) {
         <h1>🎵 SyncStream</h1>
         <p>Listen together in perfect sync. Create a room, invite friends, and enjoy music through your own earbuds.</p>
 
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 28, marginTop: -16 }}>
+          {['🎧 Zero-latency sync', '💬 Live chat', '👑 Host controls'].map((f) => (
+            <span
+              key={f}
+              style={{
+                fontSize: 12,
+                fontWeight: 500,
+                padding: '5px 12px',
+                borderRadius: 999,
+                background: 'rgba(255,255,255,0.05)',
+                border: '1px solid var(--border)',
+                color: 'var(--text-secondary)'
+              }}
+            >
+              {f}
+            </span>
+          ))}
+        </div>
+
         <div className="form-group">
           <label>Your Name</label>
           <input

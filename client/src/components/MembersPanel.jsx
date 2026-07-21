@@ -1,15 +1,54 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 
 function MembersPanel({ members, hostId, currentUserId, isHost, socket, roomId }) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
+  const [unread, setUnread] = useState(0);
+  const [toast, setToast] = useState(null); // latest incoming message for the pop-up
   const chatEndRef = useRef(null);
+  const audioCtxRef = useRef(null);
+  const isOpenRef = useRef(isOpen);
+  const toastTimerRef = useRef(null);
+  isOpenRef.current = isOpen;
+
+  // Play a soft two-note "ding" using the Web Audio API (no asset file needed).
+  const playChime = useCallback(() => {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      if (!audioCtxRef.current) audioCtxRef.current = new AudioCtx();
+      const ctx = audioCtxRef.current;
+      if (ctx.state === 'suspended') ctx.resume();
+
+      const now = ctx.currentTime;
+      const notes = [880, 1174.66]; // A5 -> D6, a gentle rising chime
+      notes.forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        const start = now + i * 0.09;
+        gain.gain.setValueAtTime(0, start);
+        gain.gain.linearRampToValueAtTime(0.12, start + 0.02); // light volume
+        gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.35);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(start);
+        osc.stop(start + 0.4);
+      });
+    } catch (_) { /* audio not available */ }
+  }, []);
 
   // Scroll to bottom on new messages
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  // Clear unread count when the panel is opened
+  useEffect(() => {
+    if (isOpen) setUnread(0);
+  }, [isOpen]);
 
   // Listen for chat messages
   useEffect(() => {
@@ -17,11 +56,27 @@ function MembersPanel({ members, hostId, currentUserId, isHost, socket, roomId }
 
     const handleChatMessage = (msg) => {
       setMessages(prev => [...prev, msg]);
+
+      // Only notify for messages from other people
+      if (msg.userId !== currentUserId) {
+        playChime();
+        // Show the pop-up (and bump unread) when the panel is closed
+        if (!isOpenRef.current) {
+          setUnread(prev => prev + 1);
+          setToast(msg);
+          if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+          toastTimerRef.current = setTimeout(() => setToast(null), 4500);
+        }
+      }
     };
 
     socket.on('chat:message', handleChatMessage);
     return () => socket.off('chat:message', handleChatMessage);
-  }, [socket]);
+  }, [socket, currentUserId, playChime]);
+
+  useEffect(() => () => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+  }, []);
 
   const sendMessage = (e) => {
     e.preventDefault();
@@ -41,6 +96,34 @@ function MembersPanel({ members, hostId, currentUserId, isHost, socket, roomId }
 
   return (
     <>
+      {/* Chat pop-up notification (shown when a message arrives and panel is closed) */}
+      {toast && (
+        <div
+          className="chat-toast"
+          onClick={() => { setIsOpen(true); setToast(null); }}
+        >
+          <div
+            className="chat-toast-avatar"
+            style={{
+              background: toast.userId === hostId
+                ? 'linear-gradient(135deg, #ffd700, #ff8c00)'
+                : 'var(--accent)',
+              color: toast.userId === hostId ? '#1a1a24' : '#fff'
+            }}
+          >
+            {toast.username?.charAt(0)?.toUpperCase() || '?'}
+          </div>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div className="chat-toast-name">
+              {toast.username}
+              {toast.userId === hostId && <span>👑</span>}
+            </div>
+            <div className="chat-toast-text">{toast.message}</div>
+          </div>
+          <span className="chat-toast-icon">💬</span>
+        </div>
+      )}
+
       {/* Toggle button */}
       <button
         className="panel-toggle"
@@ -67,6 +150,9 @@ function MembersPanel({ members, hostId, currentUserId, isHost, socket, roomId }
         }}
       >
         {isOpen ? '›' : '‹'}
+        {!isOpen && unread > 0 && (
+          <span className="panel-badge">{unread > 9 ? '9+' : unread}</span>
+        )}
       </button>
 
       {/* Sliding Panel */}
