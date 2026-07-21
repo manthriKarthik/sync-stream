@@ -42,6 +42,7 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
     pause,
     seek,
     setVolume,
+    setSharedActive,
     clockOffset
   } = useAudioSync(socket, handleTrackEnded);
 
@@ -163,6 +164,26 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
       }
     }
   }, [queue, currentTrackIndex, loadTrack]);
+
+  // Enforce ONE active player at a time so two songs never overlap when
+  // switching between a local (Audius/upload) track and a YouTube/Spotify one.
+  useEffect(() => {
+    const track = queue[currentTrackIndex];
+    if (!track) return;
+    const isShared = track.platform !== 'youtube' && track.platform !== 'spotify';
+    // Silence/allow the shared <audio> engine based on the active track type.
+    setSharedActive(isShared);
+    if (track.platform === 'youtube') {
+      try { spotify.pause(); } catch (_) { /* ignore */ }
+    } else if (track.platform === 'spotify') {
+      try { youtube.pause(); } catch (_) { /* ignore */ }
+    } else {
+      // Local / Audius / upload: stop both platform players.
+      try { youtube.pause(); } catch (_) { /* ignore */ }
+      try { spotify.pause(); } catch (_) { /* ignore */ }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentTrackIndex, queue]);
 
   // Handle platform track sync (when server broadcasts play for a platform track)
   useEffect(() => {
