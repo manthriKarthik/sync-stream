@@ -207,7 +207,12 @@ export function useYouTube(onEnded) {
         p.playVideo();
         setTimeout(() => {
           try {
-            p.pauseVideo();
+            // Only undo the muted priming if playback hasn't actually started
+            // in the meantime (e.g. a real track was force-played by a tap).
+            const st = typeof p.getPlayerState === 'function' ? p.getPlayerState() : -1;
+            if (st !== 1 && st !== 3) {
+              p.pauseVideo();
+            }
             p.unMute();
           } catch (_) { /* ignore */ }
         }, 50);

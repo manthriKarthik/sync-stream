@@ -406,7 +406,8 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
     if (!track || track.platform !== 'youtube') return;
     // Runs inside a user gesture, so the browser allows playback with sound.
     // Force a fresh load so a blocked/paused player definitely starts here.
-    youtube.unlock();
+    // (playTrack with fromGesture already marks the player unlocked; calling
+    // unlock() here would schedule a pauseVideo that stops playback again.)
     youtube.playTrack(track.uri, computePlatformPosition(platformStateRef.current), true);
     // Re-sync to the group position right after starting.
     if (socket && roomState?.id) {
