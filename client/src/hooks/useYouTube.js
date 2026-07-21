@@ -115,7 +115,7 @@ export function useYouTube(onEnded) {
   }, [isReady]);
 
   // Play a video by YouTube video ID
-  const playTrack = useCallback((videoId, positionSeconds = 0) => {
+  const playTrack = useCallback((videoId, positionSeconds = 0, fromGesture = false) => {
     setError(null);
     // If the player instance isn't ready yet, remember what to play and apply
     // it as soon as the player initializes (see the effect below).
@@ -125,8 +125,14 @@ export function useYouTube(onEnded) {
     }
     try {
       const p = playerRef.current;
+      // An explicit user tap authorizes autoplay: mark unlocked and force a
+      // fresh loadVideoById so mobile browsers definitely start playback.
+      if (fromGesture) {
+        unlockedRef.current = true;
+        setIsUnlocked(true);
+      }
       const sameVideo = loadedVideoIdRef.current === videoId;
-      if (sameVideo) {
+      if (sameVideo && !fromGesture) {
         // Same track (play/pause/seek) — realign & resume WITHOUT reloading.
         // loadVideoById would restart the video and re-trigger mobile autoplay
         // blocking, which is why playback used to stop on every action.
@@ -136,6 +142,9 @@ export function useYouTube(onEnded) {
         }
         p.playVideo();
       } else {
+        // New track, or an explicit user tap: (re)load and play. Loading inside
+        // the tap gesture guarantees the browser allows playback with sound.
+        try { p.unMute(); } catch (_) { /* ignore */ }
         loadedVideoIdRef.current = videoId;
         p.loadVideoById({ videoId, startSeconds: positionSeconds || 0 });
         p.playVideo();

@@ -374,7 +374,7 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
     const ps = platformStateRef.current || roomState?.playbackState;
     const track = queue[currentTrackIndex];
     if (track?.platform === 'youtube' && ps?.playing) {
-      youtube.playTrack(track.uri, computePlatformPosition(ps));
+      youtube.playTrack(track.uri, computePlatformPosition(ps), true);
     } else if (track?.url && track.platform !== 'spotify' && ps?.playing) {
       // Shared audio (Audius / uploads): start it within this gesture too so
       // mobile listeners actually hear it. Position gets corrected by the sync.
@@ -405,7 +405,13 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
     const track = queue[currentTrackIndex];
     if (!track || track.platform !== 'youtube') return;
     // Runs inside a user gesture, so the browser allows playback with sound.
-    youtube.playTrack(track.uri, computePlatformPosition(platformStateRef.current));
+    // Force a fresh load so a blocked/paused player definitely starts here.
+    youtube.unlock();
+    youtube.playTrack(track.uri, computePlatformPosition(platformStateRef.current), true);
+    // Re-sync to the group position right after starting.
+    if (socket && roomState?.id) {
+      socket.emit('playback:request-sync', { roomId: roomState.id });
+    }
   };
 
   // --- Media Session: lock-screen / background controls (mobile) ---
