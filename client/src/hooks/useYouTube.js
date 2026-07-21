@@ -19,6 +19,7 @@ export function useYouTube(onEnded) {
   const containerRef = useRef(null);
   const unlockedRef = useRef(false);
   const pendingPlayRef = useRef(null); // { videoId, positionSeconds } queued until unlock
+  const loadedVideoIdRef = useRef(null); // currently-loaded video, to avoid needless reloads
 
   // Load YouTube IFrame API
   useEffect(() => {
@@ -114,17 +115,28 @@ export function useYouTube(onEnded) {
       return;
     }
     try {
-      playerRef.current.loadVideoById({
-        videoId,
-        startSeconds: positionSeconds || 0
-      });
-      playerRef.current.playVideo();
+      const p = playerRef.current;
+      const sameVideo = loadedVideoIdRef.current === videoId;
+      if (sameVideo) {
+        // Same track (play/pause/seek) — realign & resume WITHOUT reloading.
+        // loadVideoById would restart the video and re-trigger mobile autoplay
+        // blocking, which is why playback used to stop on every action.
+        const cur = typeof p.getCurrentTime === 'function' ? (p.getCurrentTime() || 0) : 0;
+        if (typeof positionSeconds === 'number' && Math.abs(cur - positionSeconds) > 1.5) {
+          p.seekTo(positionSeconds, true);
+        }
+        p.playVideo();
+      } else {
+        loadedVideoIdRef.current = videoId;
+        p.loadVideoById({ videoId, startSeconds: positionSeconds || 0 });
+        p.playVideo();
+      }
       // Verify playback actually started. On listener devices the browser may
       // block autoplay (no recent user gesture) — if so, ask for a tap.
       setTimeout(() => {
-        const p = playerRef.current;
-        if (!p || typeof p.getPlayerState !== 'function') return;
-        const st = p.getPlayerState();
+        const pl = playerRef.current;
+        if (!pl || typeof pl.getPlayerState !== 'function') return;
+        const st = pl.getPlayerState();
         // 1 = playing, 3 = buffering
         if (st !== 1 && st !== 3) {
           setNeedsGesture(true);
@@ -142,6 +154,7 @@ export function useYouTube(onEnded) {
     if (!pending) return;
     pendingPlayRef.current = null;
     try {
+      loadedVideoIdRef.current = pending.videoId;
       playerRef.current.loadVideoById({
         videoId: pending.videoId,
         startSeconds: pending.positionSeconds || 0
@@ -162,6 +175,7 @@ export function useYouTube(onEnded) {
     if (pending) {
       // Apply the queued track inside this user gesture so mobile allows it.
       pendingPlayRef.current = null;
+      loadedVideoIdRef.current = pending.videoId;
       p.loadVideoById({
         videoId: pending.videoId,
         startSeconds: pending.positionSeconds || 0

@@ -246,6 +246,14 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
     return () => clearInterval(id);
   }, [queue, currentTrackIndex, youtube]);
 
+  // Ask the server for the current playback state on mount, so a device that
+  // joins mid-song (2nd, 3rd, ... listener) starts playing in sync instead of
+  // sitting silent until the next host action.
+  useEffect(() => {
+    if (!socket || !roomState?.id) return;
+    socket.emit('playback:request-sync', { roomId: roomState.id });
+  }, [socket, roomState?.id]);
+
   const canControl = isHost || mode === 'collaborative';
 
   // YouTube/Spotify tracks report progress via their own players, not the shared <audio>
@@ -328,6 +336,18 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
     // Unlock the Spotify SDK audio element if already connected
     spotify.activate();
     setAudioEnabled(true);
+
+    // Start the currently-active track INSIDE this user gesture so mobile
+    // browsers allow it to play with sound. Then request a fresh sync so the
+    // position is corrected precisely.
+    const ps = platformStateRef.current || roomState?.playbackState;
+    const track = queue[currentTrackIndex];
+    if (track?.platform === 'youtube' && ps?.playing) {
+      youtube.playTrack(track.uri, computePlatformPosition(ps));
+    }
+    if (socket && roomState?.id) {
+      socket.emit('playback:request-sync', { roomId: roomState.id });
+    }
   };
 
   // Explicitly activate the Spotify SDK audio element on this device.

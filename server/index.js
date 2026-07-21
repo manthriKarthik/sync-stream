@@ -435,6 +435,28 @@ io.on('connection', (socket) => {
     io.to(roomId).emit('playback:sync', { ...room.playbackState, syncTime });
   });
 
+  // A device that joins mid-song (or re-enables audio on mobile) can request
+  // the current playback state so it starts playing in sync.
+  socket.on('playback:request-sync', ({ roomId }) => {
+    const normalizedId = roomId?.trim()?.toLowerCase();
+    const room = roomManager.getRoom(normalizedId);
+    if (!room || !room.playbackState) return;
+    const ps = room.playbackState;
+    if (!ps.playing) {
+      socket.emit('playback:sync', { ...ps });
+      return;
+    }
+    const now = Date.now();
+    const elapsed = (now - (ps.startedAt || now)) / 1000;
+    const syncTime = now + 200;
+    socket.emit('playback:sync', {
+      ...ps,
+      position: (ps.position || 0) + Math.max(0, elapsed),
+      startedAt: syncTime,
+      syncTime
+    });
+  });
+
   // Queue management
   socket.on('queue:add-platform-track', ({ roomId, track }) => {
     const room = roomManager.getRoom(roomId);
