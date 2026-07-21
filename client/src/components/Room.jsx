@@ -6,7 +6,7 @@ import { useYouTube } from '../hooks/useYouTube';
 import { useAudius } from '../hooks/useAudius';
 import Player from './Player';
 import Queue from './Queue';
-import Members from './Members';
+import MembersPanel from './MembersPanel';
 import Upload from './Upload';
 import LiveCapture from './LiveCapture';
 import PlatformConnect from './PlatformConnect';
@@ -99,6 +99,10 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
     const handleHostChanged = ({ newHostId }) => {
       setRoomState(prev => ({ ...prev, hostId: newHostId }));
     };
+    const handleKicked = () => {
+      alert('You have been removed from the room by the host.');
+      onLeave();
+    };
 
     const handlePlaybackSync = (state) => {
       if (state.trackIndex !== currentTrackIndex && queue[state.trackIndex]) {
@@ -118,6 +122,7 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
     socket.on('room:member-left', handleMemberLeft);
     socket.on('room:mode-changed', handleModeChanged);
     socket.on('room:host-changed', handleHostChanged);
+    socket.on('room:kicked', handleKicked);
     socket.on('playback:sync', handlePlaybackSync);
 
     return () => {
@@ -126,9 +131,10 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
       socket.off('room:member-left', handleMemberLeft);
       socket.off('room:mode-changed', handleModeChanged);
       socket.off('room:host-changed', handleHostChanged);
+      socket.off('room:kicked', handleKicked);
       socket.off('playback:sync', handlePlaybackSync);
     };
-  }, [socket, isHost, isStreaming, currentTrackIndex, queue]);
+  }, [socket, isHost, isStreaming, currentTrackIndex, queue, onLeave]);
 
   // Load initial track (handles both local and platform tracks)
   useEffect(() => {
@@ -459,10 +465,15 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
         />
       </div>
 
-      {/* Sidebar */}
-      <div className="room-sidebar">
-        <Members members={members} hostId={roomState.hostId} />
-      </div>
+      {/* Sliding Members & Chat Panel */}
+      <MembersPanel
+        members={members}
+        hostId={roomState.hostId}
+        currentUserId={socket?.id}
+        isHost={isHost}
+        socket={socket}
+        roomId={roomState.id}
+      />
 
       {/* Player bar */}
       <Player

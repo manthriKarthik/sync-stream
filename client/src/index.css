@@ -185,15 +185,12 @@ input {
 
 /* Room View */
 .room-layout {
-  display: grid;
-  grid-template-columns: 1fr 300px;
-  grid-template-rows: auto 1fr auto;
+  display: flex;
+  flex-direction: column;
   min-height: 100vh;
-  gap: 0;
 }
 
 .room-header {
-  grid-column: 1 / -1;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -224,15 +221,14 @@ input {
 }
 
 .room-main {
+  flex: 1;
   padding: 24px;
   overflow-y: auto;
+  padding-right: 60px; /* Space for the sliding panel toggle */
 }
 
 .room-sidebar {
-  background: var(--bg-secondary);
-  border-left: 1px solid var(--border);
-  padding: 20px;
-  overflow-y: auto;
+  display: none; /* Now using sliding MembersPanel */
 }
 
 .room-sidebar h3 {

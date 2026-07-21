@@ -475,6 +475,40 @@ io.on('connection', (socket) => {
     io.to(roomId).emit('room:mode-changed', mode);
   });
 
+  // Kick a member (host only)
+  socket.on('room:kick', ({ roomId, memberId }) => {
+    const room = roomManager.getRoom(roomId);
+    if (!room || room.hostId !== socket.id) return;
+    if (memberId === socket.id) return; // Can't kick yourself
+
+    // Notify the kicked user
+    io.to(memberId).emit('room:kicked');
+
+    // Remove from room
+    roomManager.removeMember(roomId, memberId);
+    const kickedSocket = io.sockets.sockets.get(memberId);
+    if (kickedSocket) {
+      kickedSocket.leave(roomId);
+    }
+
+    // Notify others
+    io.to(roomId).emit('room:member-left', { id: memberId });
+  });
+
+  // Live chat
+  socket.on('chat:send', ({ roomId, message }) => {
+    const room = roomManager.getRoom(roomId);
+    if (!room || !room.members[socket.id]) return;
+
+    const username = room.members[socket.id].username;
+    io.to(roomId).emit('chat:message', {
+      userId: socket.id,
+      username,
+      message,
+      timestamp: Date.now()
+    });
+  });
+
   // WebRTC signaling for live audio streaming
   socket.on('webrtc:offer', ({ roomId, targetId, offer }) => {
     io.to(targetId).emit('webrtc:offer', {
