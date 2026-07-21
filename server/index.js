@@ -308,8 +308,25 @@ io.on('connection', (socket) => {
   });
 
   // Room management
-  socket.on('room:create', ({ username, roomName }) => {
-    const room = roomManager.createRoom(roomName, socket.id, username);
+  socket.on('room:create', ({ username, roomName, existingId }) => {
+    // When a client reconnects after the server restarted (Render free tier
+    // wipes in-memory rooms on redeploy/sleep), the host re-sends its known
+    // room id so we can restore the same room instead of minting a new code.
+    let room;
+    if (existingId) {
+      const normalizedId = existingId.trim().toLowerCase();
+      room = roomManager.getRoom(normalizedId);
+      if (room) {
+        // Room still exists — just re-register this socket as the host.
+        room.hostId = socket.id;
+        roomManager.addMember(normalizedId, socket.id, username);
+      } else {
+        // Room was lost — recreate it with the same code so listeners can join.
+        room = roomManager.createRoom(roomName, socket.id, username, normalizedId);
+      }
+    } else {
+      room = roomManager.createRoom(roomName, socket.id, username);
+    }
     socket.join(room.id);
     socket.emit('room:created', room);
     socket.emit('room:state', roomManager.getRoomState(room.id));
@@ -562,6 +579,12 @@ function handleLeaveRoom(socket, roomId) {
 
 const PORT = process.env.PORT || 3001;
 
+// Health check (also used by the keep-alive self-ping). Must be registered
+// before the SPA catch-all below, otherwise '*' would swallow it.
+app.get('/api/health', (req, res) => {
+  res.json({ ok: true, rooms: roomManager.rooms.size, uptime: process.uptime() });
+});
+
 // Serve the built client (production/shared mode) with SPA fallback.
 // Run `npm run build` in the client folder to generate client/dist.
 const clientDist = path.join(__dirname, '..', 'client', 'dist');
@@ -577,3 +600,22 @@ app.get('*', (req, res) => {
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`🎵 Sync-Stream server running on http://localhost:${PORT}`);
 });
+
+// Keep-alive: Render's free tier spins the service down after ~15 min of
+// inactivity, which wipes all in-memory rooms. Ping ourselves periodically so
+// the service stays awake and active rooms survive.
+const SELF_URL = process.env.RENDER_EXTERNAL_URL;
+if (SELF_URL) {
+  setInterval(() => {
+    fetch(`${SELF_URL}/api/health`).catch(() => {});
+  }, 10 * 60 * 1000); // every 10 minutes
+}
+
+app.get('/api/health', (req, res) => {
+  res.json({ ok: true, rooms: roomManager.rooms.size, uptime: process.uptime() });
+});
+
+app.get('/api/health', (req, res) => {
+  res.json({ ok: true, rooms: roomManager.rooms.size, uptime: process.uptime() });
+});
+
