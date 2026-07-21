@@ -114,18 +114,23 @@ export function useAudioSync(socket, onEnded) {
     };
   }, [socket]);
 
-  // Continuous drift correction - runs every 2s while playing
+  // Continuous drift correction - runs periodically while playing
   useEffect(() => {
+    // iOS Safari stutters ("cut cut") when the playbackRate of a streamed audio
+    // element is changed, and it rebuffers on frequent seeks — especially in the
+    // background. So on iOS we NEVER nudge the rate and only hard-seek for very
+    // large drift, rarely. A little inter-device drift is imperceptible in a
+    // room; audio cutting out is not.
+    const isIOS =
+      /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
     const checkDrift = () => {
       const audio = audioRef.current;
       const state = playbackStateRef.current;
       if (!state || !state.playing || audio.paused || !audio.src) return;
 
       // Don't correct while the tab/app is hidden (screen locked / backgrounded).
-      // Mobile browsers — especially iOS Safari — throttle timers in the
-      // background, so the computed drift is unreliable and hard-seeking causes
-      // the audio to stutter ("cut cut"). Let it play freely; we re-sync once
-      // when the app becomes visible again.
       if (typeof document !== 'undefined' && document.hidden) return;
 
       // Skip if a previous correction hasn't settled yet (still seeking) or the
@@ -139,8 +144,17 @@ export function useAudioSync(socket, onEnded) {
       const drift = expectedPosition - actualPosition;
       const absDrift = Math.abs(drift);
 
+      if (isIOS) {
+        // iOS: no rate changes. Only correct really large drift, and rarely.
+        if (absDrift >= 2.5 && Date.now() - lastHardSeekRef.current > 12000) {
+          lastHardSeekRef.current = Date.now();
+          audio.currentTime = expectedPosition;
+        }
+        return;
+      }
+
       // Small/medium drift: nudge the playback rate to converge smoothly with
-      // NO audible gap. Widened the window so most drift is fixed this way.
+      // NO audible gap.
       if (absDrift > 0.08 && absDrift < 1.0) {
         audio.playbackRate = drift > 0 ? 1.03 : 0.97;
         setTimeout(() => { audio.playbackRate = 1.0; }, 1200);
@@ -153,7 +167,7 @@ export function useAudioSync(socket, onEnded) {
       }
     };
 
-    driftCheckRef.current = setInterval(checkDrift, 2000);
+    driftCheckRef.current = setInterval(checkDrift, isIOS ? 4000 : 2000);
     return () => {
       if (driftCheckRef.current) clearInterval(driftCheckRef.current);
     };
@@ -184,9 +198,10 @@ export function useAudioSync(socket, onEnded) {
         const targetPosition = state.position + Math.max(0, elapsed);
 
         if (audio.src) {
-          // Seek to correct position
+          // Seek to correct position. Use a wider tolerance so tiny differences
+          // don't trigger a seek (each seek rebuffers on iOS -> audible cut).
           const drift = Math.abs(audio.currentTime - targetPosition);
-          if (drift > 0.1) {
+          if (drift > 0.75) {
             audio.currentTime = targetPosition;
           }
 
