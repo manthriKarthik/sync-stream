@@ -5,8 +5,8 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "dev": "node --watch index.js",
-    "start": "node index.js"
+    "dev": "node --watch --openssl-legacy-provider index.js",
+    "start": "node --openssl-legacy-provider index.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

@@ -4,6 +4,7 @@ import { useWebRTC } from '../hooks/useWebRTC';
 import { useSpotify } from '../hooks/useSpotify';
 import { useYouTube } from '../hooks/useYouTube';
 import { useAudius } from '../hooks/useAudius';
+import { useSaavn } from '../hooks/useSaavn';
 import Player from './Player';
 import Queue from './Queue';
 import MembersPanel from './MembersPanel';
@@ -49,6 +50,7 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
   const spotify = useSpotify();
   const youtube = useYouTube(handleTrackEnded);
   const audius = useAudius();
+  const saavn = useSaavn();
 
   // Latest playback state for platform tracks, so a listener "tap to play"
   // can resume at the correct synced position.
@@ -646,6 +648,7 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
           spotify={spotify}
           youtube={youtube}
           audius={audius}
+          saavn={saavn}
           onTrackSelected={handlePlatformTrackSelected}
           canControl={canControl}
         />

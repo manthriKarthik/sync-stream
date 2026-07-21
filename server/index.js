@@ -6,6 +6,7 @@ import multer from 'multer';
 import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
 import fs from 'fs';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import 'dotenv/config';
 import { YouTube } from 'youtube-sr';
@@ -290,6 +291,92 @@ app.get('/api/audius/trending', async (req, res) => {
   } catch (err) {
     console.error('Audius trending error:', err.message);
     audiusHostCache = null;
+    res.json({ results: [] });
+  }
+});
+
+// --- JioSaavn (free full-song streaming, huge Bollywood/Indian catalog) ---
+// Uses JioSaavn's own backend API (reliable, no third-party mirror). Song
+// stream URLs come back encrypted (DES) and are decrypted here. The result is
+// a direct MP4/AAC stream URL that plays through the shared <audio> element, so
+// tracks get full drift-corrected sync + background/lock-screen playback (the
+// same reliable path as Audius) — ideal for group listening on 3+ devices.
+const SAAVN_ENDPOINT = 'https://www.jiosaavn.com/api.php';
+const SAAVN_DES_KEY = '38346591';
+
+function decryptSaavnUrl(encrypted) {
+  try {
+    const decipher = crypto.createDecipheriv('des-ecb', Buffer.from(SAAVN_DES_KEY), null);
+    decipher.setAutoPadding(true);
+    let decrypted = decipher.update(encrypted, 'base64', 'utf8');
+    decrypted += decipher.final('utf8');
+    // Upgrade the default 96kbps URL to 320kbps.
+    return decrypted.replace('_96.mp4', '_320.mp4');
+  } catch (_) {
+    return null;
+  }
+}
+
+// Decode the HTML entities JioSaavn returns in titles/artist names.
+function decodeEntities(str = '') {
+  return String(str)
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, '&')
+    .replace(/&#039;/g, "'")
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>');
+}
+
+function mapSaavnSong(song) {
+  const info = song.more_info || {};
+  const encrypted = info.encrypted_media_url || song.encrypted_media_url;
+  const url = encrypted ? decryptSaavnUrl(encrypted) : null;
+
+  let artist = decodeEntities(song.subtitle || '');
+  const primary = info.artistMap?.primary_artists || info.artistMap?.artists;
+  if (Array.isArray(primary) && primary.length) {
+    artist = primary.map(a => decodeEntities(a.name)).join(', ');
+  }
+
+  const durationSec = Number(info.duration || song.duration || 0);
+  const mins = Math.floor(durationSec / 60);
+  const secs = durationSec % 60;
+
+  // Use the largest artwork available.
+  const image = (song.image || '').replace('150x150', '500x500').replace('50x50', '500x500');
+
+  return {
+    id: song.id,
+    uri: song.id,
+    name: decodeEntities(song.title || song.song || 'Unknown'),
+    artist: artist || 'Unknown',
+    album: decodeEntities(info.album || song.album || ''),
+    albumArt: image,
+    url, // decrypted direct stream → shared <audio>, full sync + background
+    duration: durationSec * 1000,
+    durationText: `${mins}:${secs.toString().padStart(2, '0')}`,
+    platform: 'saavn'
+  };
+}
+
+app.get('/api/saavn/search', async (req, res) => {
+  const query = req.query.q;
+  if (!query) return res.json({ results: [] });
+
+  try {
+    const url = `${SAAVN_ENDPOINT}?__call=search.getResults&q=${encodeURIComponent(query)}` +
+      `&_format=json&_marker=0&api_version=4&ctx=web6dot0&p=1&n=15`;
+    const response = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+    if (!response.ok) throw new Error(`Saavn search failed: ${response.status}`);
+    const data = await response.json();
+    const songs = data?.results || [];
+    const results = songs
+      .map(mapSaavnSong)
+      .filter(t => !!t.url); // only keep playable results
+    res.json({ results });
+  } catch (err) {
+    console.error('Saavn search error:', err.message);
     res.json({ results: [] });
   }
 });

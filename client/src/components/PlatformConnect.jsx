@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 
-function PlatformConnect({ spotify, youtube, audius, onTrackSelected, canControl }) {
+function PlatformConnect({ spotify, youtube, audius, saavn, onTrackSelected, canControl }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
@@ -19,6 +19,8 @@ function PlatformConnect({ spotify, youtube, audius, onTrackSelected, canControl
       let results = [];
       if (activeTab === 'audius') {
         results = await audius.searchTracks(searchQuery);
+      } else if (activeTab === 'saavn') {
+        results = await saavn.searchTracks(searchQuery);
       } else if (activeTab === 'youtube') {
         results = await youtube.searchTracks(searchQuery);
       } else if (activeTab === 'spotify' && spotify.isConnected) {
@@ -30,7 +32,7 @@ function PlatformConnect({ spotify, youtube, audius, onTrackSelected, canControl
     } finally {
       setSearching(false);
     }
-  }, [searchQuery, activeTab, spotify, youtube, audius]);
+  }, [searchQuery, activeTab, spotify, youtube, audius, saavn]);
 
   const handleSelectTrack = (track) => {
     onTrackSelected(track);
@@ -110,7 +112,7 @@ function PlatformConnect({ spotify, youtube, audius, onTrackSelected, canControl
         onClick={() => setShowPanel(true)}
         style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}
       >
-        🎵 Search Music (Audius / YouTube / Spotify)
+        🎵 Search Music (Audius / Saavn / YouTube / Spotify)
       </button>
     );
   }
@@ -143,6 +145,12 @@ function PlatformConnect({ spotify, youtube, audius, onTrackSelected, canControl
           🎧 Audius
         </button>
         <button
+          className={activeTab === 'saavn' ? 'active' : ''}
+          onClick={() => setActiveTab('saavn')}
+        >
+          🎶 Saavn
+        </button>
+        <button
           className={activeTab === 'youtube' ? 'active' : ''}
           onClick={() => setActiveTab('youtube')}
         >
@@ -167,6 +175,27 @@ function PlatformConnect({ spotify, youtube, audius, onTrackSelected, canControl
               className="input"
               type="text"
               placeholder="Search Audius for music..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            <button className="btn btn-primary" type="submit" disabled={searching}>
+              {searching ? '...' : '🔍'}
+            </button>
+          </form>
+        </div>
+      )}
+
+      {/* Saavn - free full songs (huge Bollywood/Indian catalog), best for groups */}
+      {activeTab === 'saavn' && (
+        <div>
+          <p style={{ fontSize: 12, color: 'var(--success)', marginBottom: 12 }}>
+            ✓ Free • full songs • no login • plays on ALL devices + background
+          </p>
+          <form onSubmit={handleSearch} style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+            <input
+              className="input"
+              type="text"
+              placeholder="Search songs (Hindi, English, Telugu, Tamil...)"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
