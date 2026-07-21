@@ -25,6 +25,9 @@ export function useAudioSync(socket, onEnded) {
   const animFrameRef = useRef(null);
   const playbackStateRef = useRef(null);
   const offsetSamplesRef = useRef([]);
+  // Timestamp of the last hard seek, to rate-limit hard seeks (avoids the iOS
+  // "cut cut" stutter from seeking every drift check).
+  const lastHardSeekRef = useRef(0);
   // Whether the CURRENTLY active track uses this shared <audio> element
   // (Audius / uploads). When a YouTube/Spotify track is active this is false,
   // so we ignore playback:sync and keep the shared element silent — otherwise
@@ -118,20 +121,34 @@ export function useAudioSync(socket, onEnded) {
       const state = playbackStateRef.current;
       if (!state || !state.playing || audio.paused || !audio.src) return;
 
+      // Don't correct while the tab/app is hidden (screen locked / backgrounded).
+      // Mobile browsers — especially iOS Safari — throttle timers in the
+      // background, so the computed drift is unreliable and hard-seeking causes
+      // the audio to stutter ("cut cut"). Let it play freely; we re-sync once
+      // when the app becomes visible again.
+      if (typeof document !== 'undefined' && document.hidden) return;
+
+      // Skip if a previous correction hasn't settled yet (still seeking) or the
+      // audio isn't buffered enough to play smoothly.
+      if (audio.seeking || audio.readyState < 3) return;
+
       const syncedNow = Date.now() + clockOffset;
       const elapsed = (syncedNow - state.syncTime) / 1000;
       const expectedPosition = state.position + elapsed;
       const actualPosition = audio.currentTime;
       const drift = expectedPosition - actualPosition;
+      const absDrift = Math.abs(drift);
 
-      // If drift is small (<300ms), adjust playback rate to catch up smoothly
-      if (Math.abs(drift) > 0.05 && Math.abs(drift) < 0.3) {
-        // Speed up or slow down slightly to converge
+      // Small/medium drift: nudge the playback rate to converge smoothly with
+      // NO audible gap. Widened the window so most drift is fixed this way.
+      if (absDrift > 0.08 && absDrift < 1.0) {
         audio.playbackRate = drift > 0 ? 1.03 : 0.97;
-        setTimeout(() => { audio.playbackRate = 1.0; }, 1000);
+        setTimeout(() => { audio.playbackRate = 1.0; }, 1200);
       }
-      // If drift is large (>300ms), hard seek
-      else if (Math.abs(drift) > 0.3) {
+      // Large drift: hard seek — but at most once every 6s so a persistent
+      // small clock error can't trigger a seek-every-2s stutter loop.
+      else if (absDrift >= 1.0 && Date.now() - lastHardSeekRef.current > 6000) {
+        lastHardSeekRef.current = Date.now();
         audio.currentTime = expectedPosition;
       }
     };
