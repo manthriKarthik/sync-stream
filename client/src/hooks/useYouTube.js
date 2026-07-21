@@ -12,6 +12,7 @@ export function useYouTube(onEnded) {
   const [isConnected, setIsConnected] = useState(true); // Always connected (no login needed)
   const [isUnlocked, setIsUnlocked] = useState(false);
   const [needsGesture, setNeedsGesture] = useState(false);
+  const [isVideoPlaying, setIsVideoPlaying] = useState(false);
   const [player, setPlayer] = useState(null);
   const [currentTrack, setCurrentTrack] = useState(null);
   const [error, setError] = useState(null);
@@ -83,11 +84,19 @@ export function useYouTube(onEnded) {
         },
         onStateChange: (event) => {
           // YT.PlayerState: ENDED=0, PLAYING=1, PAUSED=2, BUFFERING=3, CUED=5
-          if (event.data === 1 || event.data === 3) {
-            // Actually playing/buffering -> no manual tap needed
+          if (event.data === 1) {
+            // Actually playing -> no manual tap needed
             setNeedsGesture(false);
+            setIsVideoPlaying(true);
+          } else if (event.data === 3) {
+            // Buffering -> playback is coming, no tap needed
+            setNeedsGesture(false);
+          } else if (event.data === 2) {
+            // Paused
+            setIsVideoPlaying(false);
           } else if (event.data === 0) {
             // Track finished — notify the Room so the host advances the queue.
+            setIsVideoPlaying(false);
             onEndedRef.current?.();
           }
         },
@@ -264,6 +273,7 @@ export function useYouTube(onEnded) {
     isConnected,
     isUnlocked,
     needsGesture,
+    isVideoPlaying,
     currentTrack,
     error,
     playTrack,

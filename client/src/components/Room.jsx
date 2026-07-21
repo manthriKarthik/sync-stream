@@ -52,6 +52,12 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
   // Latest playback state for platform tracks, so a listener "tap to play"
   // can resume at the correct synced position.
   const platformStateRef = useRef(null);
+  // Sync we still need to apply once the queue arrives (a device that joins
+  // mid-song can receive the sync before its queue is populated).
+  const pendingPlatformRef = useRef(null);
+  // Reactive flag: is the room currently playing a platform (YouTube/Spotify)
+  // track? Used to decide whether to show the "tap to play" prompt.
+  const [platformPlaying, setPlatformPlaying] = useState(false);
   const computePlatformPosition = (state) => {
     if (!state) return 0;
     if (!state.playing) return state.position || 0;
@@ -163,12 +169,15 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
     if (!socket) return;
 
     const handlePlatformSync = (state) => {
-      const track = queue[state.trackIndex];
-      if (!track) return;
-
-      // Remember the latest playback state so a listener "tap to play" can
-      // resume at the correct synced position.
+      // Always remember the latest state first — even if the queue hasn't
+      // arrived on this device yet — so the progress bar keeps advancing and
+      // we can apply playback the moment the queue is ready.
       platformStateRef.current = state;
+      pendingPlatformRef.current = state;
+      setPlatformPlaying(!!state.playing);
+
+      const track = queue[state.trackIndex];
+      if (!track) return; // queue not ready yet — applied by the effect below
 
       if (track.platform === 'youtube') {
         if (state.playing) {
@@ -188,6 +197,22 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
     socket.on('playback:sync', handlePlatformSync);
     return () => socket.off('playback:sync', handlePlatformSync);
   }, [socket, queue, spotify, youtube, clockOffset]);
+
+  // Apply any pending platform playback once the queue/track becomes available.
+  // Fixes a device (2nd/3rd listener) that joined mid-song and received the
+  // sync before its queue had loaded — previously it stayed silent with a
+  // frozen progress bar and no "tap to play" prompt.
+  useEffect(() => {
+    const state = pendingPlatformRef.current;
+    if (!state || !state.playing) return;
+    const track = queue[state.trackIndex];
+    if (!track) return;
+    if (track.platform === 'youtube') {
+      youtube.playTrack(track.uri, computePlatformPosition(state));
+    } else if (track.platform === 'spotify' && spotify.isConnected) {
+      spotify.playTrack(track.uri, computePlatformPosition(state) * 1000);
+    }
+  }, [queue, currentTrackIndex, spotify.isConnected, youtube]);
 
   // Poll the active platform player so the progress bar keeps moving for
   // YouTube/Spotify tracks (they don't use the shared <audio> element).
@@ -515,8 +540,12 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
           🔊 Tap to enable Spotify sound on this device
         </div>
       )}
-      {/* YouTube tap-to-play prompt (browser blocked autoplay on this device) */}
-      {audioEnabled && isPlatformTrack && activeTrack?.platform === 'youtube' && youtube.needsGesture && (
+      {/* YouTube tap-to-play prompt (browser blocked autoplay on this device).
+          Shown whenever the room is playing a YouTube track but this device's
+          player isn't actually playing — covers blocked autoplay, joining
+          mid-song, and coming back from the background. */}
+      {audioEnabled && isPlatformTrack && activeTrack?.platform === 'youtube' &&
+        platformPlaying && (youtube.needsGesture || !youtube.isVideoPlaying) && (
         <div
           style={{
             position: 'fixed',
