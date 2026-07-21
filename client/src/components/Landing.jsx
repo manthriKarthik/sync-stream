@@ -15,7 +15,8 @@ function Landing({ onCreateRoom, onJoinRoom, connected }) {
   const handleJoin = (e) => {
     e.preventDefault();
     if (!username.trim() || !roomCode.trim()) return;
-    onJoinRoom(roomCode.trim(), username.trim());
+    // Normalize to lowercase for case-insensitive matching
+    onJoinRoom(roomCode.trim().toLowerCase(), username.trim());
   };
 
   return (

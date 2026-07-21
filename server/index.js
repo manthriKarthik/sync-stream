@@ -316,18 +316,19 @@ io.on('connection', (socket) => {
   });
 
   socket.on('room:join', ({ roomId, username }) => {
-    const room = roomManager.getRoom(roomId);
+    const normalizedId = roomId?.trim()?.toLowerCase();
+    const room = roomManager.getRoom(normalizedId);
     if (!room) {
-      socket.emit('error', { message: 'Room not found' });
+      socket.emit('error', { message: 'Room not found. Check the code and try again.' });
       return;
     }
 
-    roomManager.addMember(roomId, socket.id, username);
-    socket.join(roomId);
+    roomManager.addMember(normalizedId, socket.id, username);
+    socket.join(normalizedId);
 
     // Notify others
-    io.to(roomId).emit('room:member-joined', { id: socket.id, username });
-    socket.emit('room:state', roomManager.getRoomState(roomId));
+    io.to(normalizedId).emit('room:member-joined', { id: socket.id, username });
+    socket.emit('room:state', roomManager.getRoomState(normalizedId));
 
     // If something is already playing, send the current sync state to the new
     // listener so they can catch up mid-song (with a recalculated position).

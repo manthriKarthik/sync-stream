@@ -6,7 +6,7 @@ export class RoomManager {
   }
 
   createRoom(name, hostSocketId, hostUsername) {
-    const id = uuidv4().slice(0, 8); // Short room codes
+    const id = uuidv4().slice(0, 8).toLowerCase(); // Lowercase for case-insensitive matching
     const room = {
       id,
       name: name || `${hostUsername}'s Room`,
