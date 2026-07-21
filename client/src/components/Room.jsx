@@ -201,8 +201,14 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
 
     if (track.platform === 'youtube') {
       intervalId = setInterval(() => {
-        const t = youtube.getPosition();
+        let t = youtube.getPosition();
         const d = youtube.getDuration();
+        // If this device's YouTube player isn't reporting a position (blocked
+        // autoplay, backgrounded, etc.), fall back to the synced clock so the
+        // progress bar still moves for everyone.
+        if ((!t || t <= 0) && platformStateRef.current?.playing) {
+          t = computePlatformPosition(platformStateRef.current);
+        }
         setPlatformProgress({
           time: t || 0,
           duration: d || (track.duration ? track.duration / 1000 : 0)
@@ -344,6 +350,16 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
     const track = queue[currentTrackIndex];
     if (track?.platform === 'youtube' && ps?.playing) {
       youtube.playTrack(track.uri, computePlatformPosition(ps));
+    } else if (track?.url && track.platform !== 'spotify' && ps?.playing) {
+      // Shared audio (Audius / uploads): start it within this gesture too so
+      // mobile listeners actually hear it. Position gets corrected by the sync.
+      try {
+        const a = audioRef.current;
+        if (a) {
+          if (!a.src) loadTrack(track.url);
+          a.play().catch(() => {});
+        }
+      } catch (_) { /* ignore */ }
     }
     if (socket && roomState?.id) {
       socket.emit('playback:request-sync', { roomId: roomState.id });
@@ -366,6 +382,79 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
     // Runs inside a user gesture, so the browser allows playback with sound.
     youtube.playTrack(track.uri, computePlatformPosition(platformStateRef.current));
   };
+
+  // --- Media Session: lock-screen / background controls (mobile) ---
+  // Shows play/pause/next/prev on the lock screen & notification shade, and
+  // helps keep the shared audio (Audius / uploads) playing while the app is
+  // backgrounded or the phone is locked.
+  const mediaControlsRef = useRef({});
+  mediaControlsRef.current = { handlePlay, handlePause, handleNext, handlePrev };
+
+  useEffect(() => {
+    if (!('mediaSession' in navigator)) return;
+    const track = queue[currentTrackIndex];
+    if (track && 'MediaMetadata' in window) {
+      try {
+        navigator.mediaSession.metadata = new window.MediaMetadata({
+          title: track.name || 'Unknown',
+          artist: track.artist || track.addedBy || 'SyncStream',
+          album: 'SyncStream',
+          artwork: track.albumArt
+            ? [
+                { src: track.albumArt, sizes: '96x96', type: 'image/jpeg' },
+                { src: track.albumArt, sizes: '256x256', type: 'image/jpeg' },
+                { src: track.albumArt, sizes: '512x512', type: 'image/jpeg' }
+              ]
+            : []
+        });
+      } catch (_) { /* ignore */ }
+    }
+    const set = (action, fn) => {
+      try { navigator.mediaSession.setActionHandler(action, fn); } catch (_) { /* unsupported action */ }
+    };
+    set('play', () => mediaControlsRef.current.handlePlay?.());
+    set('pause', () => mediaControlsRef.current.handlePause?.());
+    set('nexttrack', () => mediaControlsRef.current.handleNext?.());
+    set('previoustrack', () => mediaControlsRef.current.handlePrev?.());
+    return () => {
+      ['play', 'pause', 'nexttrack', 'previoustrack'].forEach((a) => set(a, null));
+    };
+  }, [queue, currentTrackIndex]);
+
+  // Reflect play/pause state to the OS lock screen
+  useEffect(() => {
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
+    }
+  }, [isPlaying]);
+
+  // Keep the lock-screen scrubber position in sync
+  useEffect(() => {
+    if (!('mediaSession' in navigator) || typeof navigator.mediaSession.setPositionState !== 'function') return;
+    const dur = isPlatformTrack ? platformProgress.duration : duration;
+    const pos = isPlatformTrack ? platformProgress.time : currentTime;
+    if (dur > 0 && pos >= 0 && pos <= dur) {
+      try {
+        navigator.mediaSession.setPositionState({ duration: dur, playbackRate: 1, position: pos });
+      } catch (_) { /* ignore */ }
+    }
+  }, [currentTime, duration, platformProgress, isPlatformTrack]);
+
+  // When the app returns from background / lock, re-request the current
+  // position so playback catches back up in sync.
+  useEffect(() => {
+    const resync = () => {
+      if (document.visibilityState === 'visible' && socket && roomState?.id) {
+        socket.emit('playback:request-sync', { roomId: roomState.id });
+      }
+    };
+    document.addEventListener('visibilitychange', resync);
+    window.addEventListener('focus', resync);
+    return () => {
+      document.removeEventListener('visibilitychange', resync);
+      window.removeEventListener('focus', resync);
+    };
+  }, [socket, roomState?.id]);
 
   return (
     <div className="room-layout">

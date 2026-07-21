@@ -32,6 +32,15 @@ export function useAudioSync(socket, onEnded) {
     audio.volume = 1;
     // Reduce buffering for lower latency
     audio.preload = 'auto';
+    // Required for iOS/Android to allow inline + background/lock-screen playback
+    audio.setAttribute('playsinline', '');
+    audio.setAttribute('webkit-playsinline', '');
+    // Some mobile browsers only keep media alive in the background if the
+    // element is attached to the document.
+    if (!audio.parentNode) {
+      audio.style.display = 'none';
+      document.body.appendChild(audio);
+    }
 
     const unlock = () => {
       if (unlockedRef.current) return;
