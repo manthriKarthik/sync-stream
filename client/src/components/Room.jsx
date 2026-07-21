@@ -202,17 +202,24 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
   // Fixes a device (2nd/3rd listener) that joined mid-song and received the
   // sync before its queue had loaded — previously it stayed silent with a
   // frozen progress bar and no "tap to play" prompt.
+  //
+  // IMPORTANT: apply the pending sync only ONCE (clear the ref afterwards) and
+  // do NOT depend on the `youtube`/`spotify` objects — they are recreated on
+  // every render, which would make this effect re-fire ~4x/sec and constantly
+  // re-seek the player, causing playback to stop right after it starts.
   useEffect(() => {
     const state = pendingPlatformRef.current;
     if (!state || !state.playing) return;
     const track = queue[state.trackIndex];
     if (!track) return;
+    pendingPlatformRef.current = null; // apply once; ongoing alignment is handled by the drift effect
     if (track.platform === 'youtube') {
       youtube.playTrack(track.uri, computePlatformPosition(state));
     } else if (track.platform === 'spotify' && spotify.isConnected) {
       spotify.playTrack(track.uri, computePlatformPosition(state) * 1000);
     }
-  }, [queue, currentTrackIndex, spotify.isConnected, youtube]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queue, currentTrackIndex, spotify.isConnected]);
 
   // Poll the active platform player so the progress bar keeps moving for
   // YouTube/Spotify tracks (they don't use the shared <audio> element).
@@ -254,7 +261,8 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
       cancelled = true;
       if (intervalId) clearInterval(intervalId);
     };
-  }, [queue, currentTrackIndex, youtube, spotify]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queue, currentTrackIndex]);
 
   // Keep YouTube aligned across devices. YouTube players start slightly apart
   // and drift over time, so periodically re-seek to the synced position when
@@ -275,7 +283,8 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
     }, 3000);
 
     return () => clearInterval(id);
-  }, [queue, currentTrackIndex, youtube]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queue, currentTrackIndex]);
 
   // Ask the server for the current playback state on mount, so a device that
   // joins mid-song (2nd, 3rd, ... listener) starts playing in sync instead of
