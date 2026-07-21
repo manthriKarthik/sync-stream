@@ -5,9 +5,8 @@ export class RoomManager {
     this.rooms = new Map();
   }
 
-  createRoom(name, hostSocketId, hostUsername, existingId = null) {
-    // Reuse an existing id when restoring a room after a server restart
-    const id = (existingId || uuidv4().slice(0, 8)).toLowerCase(); // Lowercase for case-insensitive matching
+  createRoom(name, hostSocketId, hostUsername) {
+    const id = uuidv4().slice(0, 8).toLowerCase(); // Lowercase for case-insensitive matching
     const room = {
       id,
       name: name || `${hostUsername}'s Room`,

@@ -1,14 +1,9 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { io } from 'socket.io-client';
 
-export function useSocket({ onRoomState, onRoomCreated, onError, onReconnect }) {
+export function useSocket({ onRoomState, onRoomCreated, onError }) {
   const socketRef = useRef(null);
   const [connected, setConnected] = useState(false);
-  const hasConnectedRef = useRef(false);
-
-  // Keep the latest callbacks without re-running the connect effect.
-  const handlersRef = useRef({ onRoomState, onRoomCreated, onError, onReconnect });
-  handlersRef.current = { onRoomState, onRoomCreated, onError, onReconnect };
 
   useEffect(() => {
     // Connect to the same origin serving the page (routed via Vite proxy).
@@ -22,20 +17,12 @@ export function useSocket({ onRoomState, onRoomCreated, onError, onReconnect }) 
 
     socketRef.current = socket;
 
-    socket.on('connect', () => {
-      setConnected(true);
-      // On a *re*connect (e.g. after the server restarted/woke up), let the app
-      // re-establish its room so in-memory rooms are restored.
-      if (hasConnectedRef.current) {
-        handlersRef.current.onReconnect?.();
-      }
-      hasConnectedRef.current = true;
-    });
+    socket.on('connect', () => setConnected(true));
     socket.on('disconnect', () => setConnected(false));
 
-    socket.on('room:state', (state) => handlersRef.current.onRoomState(state));
-    socket.on('room:created', (room) => handlersRef.current.onRoomCreated(room));
-    socket.on('error', (err) => handlersRef.current.onError(err));
+    socket.on('room:state', (state) => onRoomState(state));
+    socket.on('room:created', (room) => onRoomCreated(room));
+    socket.on('error', (err) => onError(err));
 
     return () => {
       socket.disconnect();
