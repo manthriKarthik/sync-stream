@@ -133,6 +133,10 @@ app.post('/api/upload/:roomId', upload.single('audio'), (req, res) => {
 
   room.queue.push(track);
   io.to(roomId).emit('queue:updated', room.queue);
+  io.to(roomId).emit('queue:song-added', {
+    name: track.name,
+    addedBy: track.addedBy || 'Someone'
+  });
 
   res.json({ track });
 });
@@ -571,6 +575,11 @@ io.on('connection', (socket) => {
       addedBy: track.addedBy || 'unknown'
     });
     io.to(roomId).emit('queue:updated', room.queue);
+    // Notify everyone (a small pop-up) that a song was added to the queue.
+    io.to(roomId).emit('queue:song-added', {
+      name: track.name,
+      addedBy: track.addedBy || 'Someone'
+    });
   });
 
   socket.on('queue:reorder', ({ roomId, queue }) => {

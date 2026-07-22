@@ -19,6 +19,8 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
   );
   const [audioEnabled, setAudioEnabled] = useState(false);
   const [spotifyActivated, setSpotifyActivated] = useState(false);
+  const [songAddedToast, setSongAddedToast] = useState(null); // { name, addedBy }
+  const songToastTimerRef = useRef(null);
 
   const isHost = roomState?.hostId === socket?.id;
 
@@ -98,6 +100,11 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
     if (!socket) return;
 
     const handleQueueUpdate = (newQueue) => setQueue(newQueue);
+    const handleSongAdded = ({ name, addedBy }) => {
+      setSongAddedToast({ name, addedBy });
+      if (songToastTimerRef.current) clearTimeout(songToastTimerRef.current);
+      songToastTimerRef.current = setTimeout(() => setSongAddedToast(null), 3500);
+    };
     const handleMemberJoined = (member) => {
       setMembers(prev => [...prev, member]);
       // If host is streaming, send offer to new member
@@ -134,6 +141,7 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
     };
 
     socket.on('queue:updated', handleQueueUpdate);
+    socket.on('queue:song-added', handleSongAdded);
     socket.on('room:member-joined', handleMemberJoined);
     socket.on('room:member-left', handleMemberLeft);
     socket.on('room:mode-changed', handleModeChanged);
@@ -144,6 +152,7 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
 
     return () => {
       socket.off('queue:updated', handleQueueUpdate);
+      socket.off('queue:song-added', handleSongAdded);
       socket.off('room:member-joined', handleMemberJoined);
       socket.off('room:member-left', handleMemberLeft);
       socket.off('room:mode-changed', handleModeChanged);
@@ -153,6 +162,11 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
       socket.off('playback:sync', handlePlaybackSync);
     };
   }, [socket, isHost, isStreaming, currentTrackIndex, queue, onLeave]);
+
+  // Clear the song-added toast timer on unmount.
+  useEffect(() => () => {
+    if (songToastTimerRef.current) clearTimeout(songToastTimerRef.current);
+  }, []);
 
   // Load initial track (handles both local and platform tracks)
   const lastLoadedUrlRef = useRef(null);
@@ -482,8 +496,16 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
     setSpotifyActivated(true);
   };
 
-  // Listener tap to start YouTube playback is no longer needed — the auto-start
-  // effect retries playback automatically once audio is enabled on the device.
+  // Fallback: if the browser hard-blocks autoplay even after audio is enabled,
+  // a single tap starts YouTube from within a user gesture (guaranteed allowed).
+  const handleYouTubeTap = () => {
+    const track = queue[currentTrackIndex];
+    if (!track || track.platform !== 'youtube') return;
+    youtube.playTrack(track.uri, computePlatformPosition(platformStateRef.current), true);
+    if (socket && roomState?.id) {
+      socket.emit('playback:request-sync', { roomId: roomState.id });
+    }
+  };
 
   // --- Media Session: lock-screen / background controls (mobile) ---
   // Shows play/pause/next/prev on the lock screen & notification shade, and
@@ -617,9 +639,62 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
           🔊 Tap to enable Spotify sound on this device
         </div>
       )}
-      {/* YouTube auto-plays on this device once audio is enabled — the old
-          manual "tap to play" pill was removed in favour of automatic retry
-          (see the auto-start effect above). */}
+      {/* "Song added" pop-up — shown to everyone when someone adds to the queue */}
+      {songAddedToast && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 20,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 9999,
+            background: 'linear-gradient(135deg, #7c3aed, #a855f7)',
+            color: '#fff',
+            borderRadius: 12,
+            padding: '12px 20px',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            maxWidth: '90vw',
+            fontSize: 14
+          }}
+        >
+          <span style={{ fontSize: 18 }}>🎵</span>
+          <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <strong>{songAddedToast.addedBy}</strong> added <strong>{songAddedToast.name}</strong>
+          </span>
+        </div>
+      )}
+
+      {/* Fallback tap-to-play: only when the browser HARD-BLOCKS YouTube autoplay
+          on this device (needsGesture). Auto-play handles every other case, so
+          this rarely appears — it's here so a blocked listener can still start. */}
+      {audioEnabled && isPlatformTrack && activeTrack?.platform === 'youtube' &&
+        platformPlaying && youtube.needsGesture && (
+        <div
+          style={{
+            position: 'fixed',
+            bottom: 100,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 9998,
+            background: '#ff0000',
+            color: '#fff',
+            borderRadius: 999,
+            padding: '12px 24px',
+            boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            fontWeight: 600
+          }}
+          onClick={handleYouTubeTap}
+        >
+          ▶ Tap to play the music on this device
+        </div>
+      )}
       {/* Header */}
       <div className="room-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
