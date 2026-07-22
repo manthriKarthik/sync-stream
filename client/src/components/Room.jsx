@@ -252,14 +252,14 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
 
     if (track.platform === 'youtube') {
       intervalId = setInterval(() => {
-        let t = youtube.getPosition();
         const d = youtube.getDuration();
-        // If this device's YouTube player isn't reporting a position (blocked
-        // autoplay, backgrounded, etc.), fall back to the synced clock so the
-        // progress bar still moves for everyone.
-        if ((!t || t <= 0) && platformStateRef.current?.playing) {
-          t = computePlatformPosition(platformStateRef.current);
-        }
+        // Drive the progress bar from the SHARED synced clock (server state +
+        // clock offset) so every device's bar agrees and reflects seeks/
+        // restarts immediately — even if this device's player is blocked,
+        // buffering, or stale. Fall back to the local player only when we have
+        // no shared state yet.
+        const state = platformStateRef.current;
+        const t = state ? computePlatformPosition(state) : (youtube.getPosition() || 0);
         setPlatformProgress({
           time: t || 0,
           duration: d || (track.duration ? track.duration / 1000 : 0)
@@ -267,10 +267,17 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
       }, 250);
     } else if (track.platform === 'spotify') {
       intervalId = setInterval(async () => {
-        const t = await spotify.getPosition();
+        const state = platformStateRef.current;
+        let t;
+        if (state) {
+          t = computePlatformPosition(state);
+        } else {
+          const p = await spotify.getPosition();
+          t = (p || 0) / 1000;
+        }
         if (cancelled) return;
         setPlatformProgress({
-          time: (t || 0) / 1000,
+          time: t || 0,
           duration: track.duration ? track.duration / 1000 : 0
         });
       }, 500);
@@ -337,6 +344,13 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
 
   const handleSeek = (time) => {
     if (!canControl) return;
+    // Optimistically reflect the new position locally so the seeker's progress
+    // bar jumps instantly instead of waiting for the server round-trip.
+    if (isPlatformTrack) {
+      setPlatformProgress((p) => ({ ...p, time }));
+    } else {
+      seek(time);
+    }
     socket.emit('playback:seek', { roomId: roomState.id, position: time });
   };
 
@@ -673,7 +687,7 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
 
       {/* Player bar */}
       <Player
-        isPlaying={isPlaying}
+        isPlaying={isPlatformTrack ? platformPlaying : isPlaying}
         currentTime={isPlatformTrack ? platformProgress.time : currentTime}
         duration={isPlatformTrack ? platformProgress.duration : duration}
         currentTrack={queue[currentTrackIndex] || null}
