@@ -351,10 +351,16 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
       const state = platformStateRef.current;
       if (!state || !state.playing) return;
       const { needsGesture, isVideoPlaying } = ytStatusRef.current;
-      if (needsGesture || !isVideoPlaying) {
-        // fromGesture=false: resume/seek without a full reload so it doesn't stutter.
-        youtube.playTrack(track.uri, computePlatformPosition(state), false);
-      }
+      if (isVideoPlaying) return; // already playing — nothing to do
+      // Don't force-restart a track that has essentially finished. When a song
+      // ends, isVideoPlaying is also false, and without this guard the retry
+      // would replay the ended track every 2s (a "plays 2s then restarts" loop)
+      // instead of letting the queue advance to the next song.
+      const dur = youtube.getDuration();
+      const expected = computePlatformPosition(state);
+      if (dur > 0 && expected >= dur - 1.5) return;
+      // fromGesture=false: resume/seek without a full reload so it doesn't stutter.
+      youtube.playTrack(track.uri, computePlatformPosition(state), false);
     }, 2000);
 
     return () => clearInterval(id);
