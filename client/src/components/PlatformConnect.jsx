@@ -44,6 +44,12 @@ function PlatformConnect({ spotify, youtube, audius, saavn, roomId, userId, onTr
     }
   }, [searchQuery, activeTab, spotify, youtube, audius, saavn]);
 
+  // Update the query; clearing the box also clears the results list.
+  const handleSearchChange = (value) => {
+    setSearchQuery(value);
+    if (!value.trim()) setSearchResults([]);
+  };
+
   const handleSelectTrack = (track) => {
     onTrackSelected(track);
     // Keep search results visible so user can add more songs
@@ -172,7 +178,7 @@ function PlatformConnect({ spotify, youtube, audius, saavn, roomId, userId, onTr
               type="text"
               placeholder="Search Audius for music..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => handleSearchChange(e.target.value)}
             />
             <button className="btn btn-primary" type="submit" disabled={searching}>
               {searching ? '...' : '🔍'}
@@ -193,7 +199,7 @@ function PlatformConnect({ spotify, youtube, audius, saavn, roomId, userId, onTr
               type="text"
               placeholder="Search songs (Hindi, English, Telugu, Tamil...)"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => handleSearchChange(e.target.value)}
             />
             <button className="btn btn-primary" type="submit" disabled={searching}>
               {searching ? '...' : '🔍'}
@@ -233,7 +239,7 @@ function PlatformConnect({ spotify, youtube, audius, saavn, roomId, userId, onTr
               type="text"
               placeholder="Search YouTube for music..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => handleSearchChange(e.target.value)}
             />
             <button className="btn btn-primary" type="submit" disabled={searching}>
               {searching ? '...' : '🔍'}
@@ -259,7 +265,7 @@ function PlatformConnect({ spotify, youtube, audius, saavn, roomId, userId, onTr
                   type="text"
                   placeholder="Search Spotify..."
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onChange={(e) => handleSearchChange(e.target.value)}
                 />
                 <button className="btn btn-primary" type="submit" disabled={searching}>
                   {searching ? '...' : '🔍'}

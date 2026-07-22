@@ -94,6 +94,11 @@ function MembersPanel({ members, hostId, currentUserId, isHost, socket, roomId }
     socket.emit('room:kick', { roomId, memberId });
   };
 
+  const toggleControl = (memberId, allowed) => {
+    if (!isHost || memberId === hostId) return;
+    socket.emit('room:set-control', { roomId, memberId, allowed });
+  };
+
   return (
     <>
       {/* Chat pop-up notification (shown when a message arrives and panel is closed) */}
@@ -258,6 +263,44 @@ function MembersPanel({ members, hostId, currentUserId, isHost, socket, roomId }
                     }}>
                       HOST
                     </span>
+                  )}
+
+                  {/* DJ badge: member the host granted playback control (visible to all) */}
+                  {!isMemberHost && member.canControl && (
+                    <span style={{
+                      fontSize: 10,
+                      padding: '3px 8px',
+                      borderRadius: 4,
+                      background: 'linear-gradient(135deg, #7c3aed, #a855f7)',
+                      color: '#fff',
+                      fontWeight: 700,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.5px'
+                    }}>
+                      DJ
+                    </span>
+                  )}
+
+                  {/* Give / Revoke control (host only, not on themselves) */}
+                  {isHost && !isMemberHost && (
+                    <button
+                      onClick={() => toggleControl(member.id, !member.canControl)}
+                      title={member.canControl ? 'Revoke playback control' : 'Give playback control'}
+                      style={{
+                        background: member.canControl ? 'rgba(124,58,237,0.25)' : 'rgba(255,255,255,0.08)',
+                        border: member.canControl ? '1px solid rgba(124,58,237,0.5)' : '1px solid var(--border)',
+                        borderRadius: 6,
+                        padding: '4px 8px',
+                        color: member.canControl ? '#a855f7' : 'var(--text-secondary)',
+                        fontSize: 11,
+                        fontWeight: 500,
+                        cursor: 'pointer',
+                        whiteSpace: 'nowrap',
+                        transition: 'all 0.2s'
+                      }}
+                    >
+                      {member.canControl ? 'Revoke' : 'Give control'}
+                    </button>
                   )}
 
                   {/* Kick button (only for host, not on themselves) */}

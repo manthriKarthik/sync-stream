@@ -102,6 +102,15 @@ const upload = multer({
 const roomManager = new RoomManager();
 const clockSync = new ClockSyncHandler();
 
+// Whether a given socket may control playback in a room:
+// the host, anyone in collaborative mode, or a member the host granted control.
+function memberCanControl(room, socketId) {
+  if (!room) return false;
+  if (room.hostId === socketId) return true;
+  if (room.mode === 'collaborative') return true;
+  return !!room.members[socketId]?.canControl;
+}
+
 // REST API
 app.post('/api/upload/:roomId', upload.single('audio'), (req, res) => {
   if (!req.file) {
@@ -442,8 +451,8 @@ io.on('connection', (socket) => {
     if (!room) return;
 
     // Check if user is host or room is collaborative
-    if (room.hostId !== socket.id && room.mode !== 'collaborative') {
-      socket.emit('error', { message: 'Only the host can control playback' });
+    if (!memberCanControl(room, socket.id)) {
+      socket.emit('error', { message: 'You do not have permission to control playback' });
       return;
     }
 
@@ -466,8 +475,8 @@ io.on('connection', (socket) => {
     const room = roomManager.getRoom(roomId);
     if (!room) return;
 
-    if (room.hostId !== socket.id && room.mode !== 'collaborative') {
-      socket.emit('error', { message: 'Only the host can control playback' });
+    if (!memberCanControl(room, socket.id)) {
+      socket.emit('error', { message: 'You do not have permission to control playback' });
       return;
     }
 
@@ -487,7 +496,7 @@ io.on('connection', (socket) => {
     const room = roomManager.getRoom(roomId);
     if (!room) return;
 
-    if (room.hostId !== socket.id && room.mode !== 'collaborative') return;
+    if (!memberCanControl(room, socket.id)) return;
 
     const syncTime = Date.now() + 100;
     room.playbackState = {
@@ -506,7 +515,7 @@ io.on('connection', (socket) => {
   socket.on('playback:next', ({ roomId }) => {
     const room = roomManager.getRoom(roomId);
     if (!room) return;
-    if (room.hostId !== socket.id && room.mode !== 'collaborative') return;
+    if (!memberCanControl(room, socket.id)) return;
     if (!room.queue || room.queue.length === 0) return;
 
     const nextIndex = (room.playbackState.trackIndex + 1) % room.queue.length;
@@ -584,6 +593,15 @@ io.on('connection', (socket) => {
     if (!room || room.hostId !== socket.id) return;
     room.mode = mode;
     io.to(roomId).emit('room:mode-changed', mode);
+  });
+
+  // Grant/revoke playback control for a specific member (host only)
+  socket.on('room:set-control', ({ roomId, memberId, allowed }) => {
+    const room = roomManager.getRoom(roomId);
+    if (!room || room.hostId !== socket.id) return;
+    if (memberId === room.hostId) return; // host always has control
+    if (!roomManager.setMemberControl(roomId, memberId, allowed)) return;
+    io.to(roomId).emit('room:control-changed', { memberId, allowed: !!allowed });
   });
 
   // Kick a member (host only)

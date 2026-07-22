@@ -46,7 +46,8 @@ export class RoomManager {
       members: Object.entries(room.members).map(([id, data]) => ({
         id,
         ...data,
-        isHost: id === room.hostId
+        isHost: id === room.hostId,
+        canControl: id === room.hostId ? true : !!data.canControl
       })),
       queue: room.queue,
       playbackState: room.playbackState
@@ -56,7 +57,15 @@ export class RoomManager {
   addMember(roomId, socketId, username) {
     const room = this.rooms.get(roomId);
     if (!room) return false;
-    room.members[socketId] = { username, joinedAt: Date.now() };
+    room.members[socketId] = { username, joinedAt: Date.now(), canControl: false };
+    return true;
+  }
+
+  // Grant or revoke a specific member's playback-control permission (host only).
+  setMemberControl(roomId, memberId, allowed) {
+    const room = this.rooms.get(roomId);
+    if (!room || !room.members[memberId]) return false;
+    room.members[memberId].canControl = !!allowed;
     return true;
   }
 

@@ -109,6 +109,9 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
       setMembers(prev => prev.filter(m => m.id !== id));
     };
     const handleModeChanged = (newMode) => setMode(newMode);
+    const handleControlChanged = ({ memberId, allowed }) => {
+      setMembers(prev => prev.map(m => (m.id === memberId ? { ...m, canControl: allowed } : m)));
+    };
     const handleHostChanged = ({ newHostId }) => {
       setRoomState(prev => ({ ...prev, hostId: newHostId }));
     };
@@ -134,6 +137,7 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
     socket.on('room:member-joined', handleMemberJoined);
     socket.on('room:member-left', handleMemberLeft);
     socket.on('room:mode-changed', handleModeChanged);
+    socket.on('room:control-changed', handleControlChanged);
     socket.on('room:host-changed', handleHostChanged);
     socket.on('room:kicked', handleKicked);
     socket.on('playback:sync', handlePlaybackSync);
@@ -143,6 +147,7 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
       socket.off('room:member-joined', handleMemberJoined);
       socket.off('room:member-left', handleMemberLeft);
       socket.off('room:mode-changed', handleModeChanged);
+      socket.off('room:control-changed', handleControlChanged);
       socket.off('room:host-changed', handleHostChanged);
       socket.off('room:kicked', handleKicked);
       socket.off('playback:sync', handlePlaybackSync);
@@ -317,7 +322,8 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
     socket.emit('playback:request-sync', { roomId: roomState.id });
   }, [socket, roomState?.id]);
 
-  const canControl = isHost || mode === 'collaborative';
+  const myMember = members.find(m => m.id === socket?.id);
+  const canControl = isHost || mode === 'collaborative' || !!myMember?.canControl;
 
   // YouTube/Spotify tracks report progress via their own players, not the shared <audio>
   const activeTrack = queue[currentTrackIndex] || null;
