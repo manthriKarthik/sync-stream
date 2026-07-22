@@ -402,6 +402,16 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
     socket.emit('playback:pause', { roomId: roomState.id });
   };
 
+  // YouTube's iframe must be kicked off inside the tap gesture, or mobile
+  // browsers keep it silent/background until the next real gesture (resume) —
+  // which then jumps ahead by the elapsed synced time. Starting it here fixes
+  // "changed the song but it doesn't play" when selecting from the queue.
+  const startYouTubeInGesture = (track) => {
+    if (track?.platform === 'youtube') {
+      youtube.playTrack(track.uri, 0, true);
+    }
+  };
+
   const handleSeek = (time) => {
     if (!canControl) return;
     // Optimistically reflect the new position locally so the seeker's progress
@@ -417,6 +427,8 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
   const handleNext = () => {
     if (!canControl || queue.length === 0) return;
     spotify.activate();
+    const nextIndex = (currentTrackIndex + 1) % queue.length;
+    startYouTubeInGesture(queue[nextIndex]);
     socket.emit('playback:next', { roomId: roomState.id });
   };
 
@@ -424,6 +436,7 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
     if (!canControl || queue.length === 0) return;
     spotify.activate();
     const prevIndex = currentTrackIndex === 0 ? queue.length - 1 : currentTrackIndex - 1;
+    startYouTubeInGesture(queue[prevIndex]);
     socket.emit('playback:play', {
       roomId: roomState.id,
       trackIndex: prevIndex,
@@ -434,6 +447,7 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
   const handleTrackSelect = (index) => {
     if (!canControl) return;
     spotify.activate();
+    startYouTubeInGesture(queue[index]);
     socket.emit('playback:play', {
       roomId: roomState.id,
       trackIndex: index,
