@@ -466,7 +466,6 @@ input {
   background: linear-gradient(90deg, #1db954, #1ed760);
   border-radius: 999px;
   position: relative;
-  transition: width 0.15s linear;
 }
 
 .progress-thumb {

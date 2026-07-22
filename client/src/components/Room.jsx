@@ -6,7 +6,6 @@ import { useYouTube } from '../hooks/useYouTube';
 import { useAudius } from '../hooks/useAudius';
 import { useSaavn } from '../hooks/useSaavn';
 import { useSoundCloud } from '../hooks/useSoundCloud';
-import { useGaana } from '../hooks/useGaana';
 import Player from './Player';
 import Queue from './Queue';
 import MembersPanel from './MembersPanel';
@@ -54,7 +53,6 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
   const audius = useAudius();
   const saavn = useSaavn();
   const soundcloud = useSoundCloud();
-  const gaana = useGaana();
 
   // Latest playback state for platform tracks, so a listener "tap to play"
   // can resume at the correct synced position.
@@ -490,7 +488,7 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
       recentGestureLoadRef.current = { videoId: track.uri, at: Date.now() };
       youtube.playTrack(track.uri, 0, true);
     } else if (isSharedTrack) {
-      // Shared <audio> tracks (Saavn / Audius / SoundCloud / Gaana / upload):
+      // Shared <audio> tracks (Saavn / Audius / SoundCloud / upload):
       // load + play the new source inside this gesture. Set lastLoadedUrlRef so
       // the "load initial track" effect doesn't reload it a second time and cut
       // it off, and mark the shared engine active so it accepts sync.
@@ -855,7 +853,6 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
           audius={audius}
           saavn={saavn}
           soundcloud={soundcloud}
-          gaana={gaana}
           roomId={roomState.id}
           userId={socket?.id}
           onTrackSelected={handlePlatformTrackSelected}

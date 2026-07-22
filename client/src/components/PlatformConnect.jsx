@@ -6,13 +6,12 @@ const TABS = [
   { id: 'audius', label: 'Audius' },
   { id: 'saavn', label: 'Saavn' },
   { id: 'soundcloud', label: 'SoundCloud' },
-  { id: 'gaana', label: 'Gaana' },
   { id: 'youtube', label: 'YouTube' },
   { id: 'spotify', label: 'Spotify' },
   { id: 'upload', label: 'Upload' }
 ];
 
-function PlatformConnect({ spotify, youtube, audius, saavn, soundcloud, gaana, roomId, userId, onTrackSelected, canControl }) {
+function PlatformConnect({ spotify, youtube, audius, saavn, soundcloud, roomId, userId, onTrackSelected, canControl }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [addedIds, setAddedIds] = useState(() => new Set());
@@ -36,8 +35,6 @@ function PlatformConnect({ spotify, youtube, audius, saavn, soundcloud, gaana, r
         results = await saavn.searchTracks(searchQuery);
       } else if (activeTab === 'soundcloud') {
         results = await soundcloud.searchTracks(searchQuery);
-      } else if (activeTab === 'gaana') {
-        results = await gaana.searchTracks(searchQuery);
       } else if (activeTab === 'youtube') {
         results = await youtube.searchTracks(searchQuery);
       } else if (activeTab === 'spotify' && spotify.isConnected) {
@@ -49,7 +46,7 @@ function PlatformConnect({ spotify, youtube, audius, saavn, soundcloud, gaana, r
     } finally {
       setSearching(false);
     }
-  }, [searchQuery, activeTab, spotify, youtube, audius, saavn, soundcloud, gaana]);
+  }, [searchQuery, activeTab, spotify, youtube, audius, saavn, soundcloud]);
 
   // Update the query; clearing the box also clears the results list.
   const handleSearchChange = (value) => {
@@ -233,27 +230,6 @@ function PlatformConnect({ spotify, youtube, audius, saavn, soundcloud, gaana, r
               className="input"
               type="text"
               placeholder="Search SoundCloud (English, remixes, covers...)"
-              value={searchQuery}
-              onChange={(e) => handleSearchChange(e.target.value)}
-            />
-            <button className="btn btn-primary" type="submit" disabled={searching}>
-              {searching ? '...' : '🔍'}
-            </button>
-          </form>
-        </div>
-      )}
-
-      {/* Gaana - large Indian + some English catalog (HLS via hls.js) */}
-      {activeTab === 'gaana' && (
-        <div>
-          <p style={{ fontSize: 12, color: 'var(--success)', marginBottom: 12 }}>
-            ✓ Free • full songs • no login • plays on ALL devices + background
-          </p>
-          <form onSubmit={handleSearch} style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-            <input
-              className="input"
-              type="text"
-              placeholder="Search Gaana (Hindi, English, Telugu, Tamil...)"
               value={searchQuery}
               onChange={(e) => handleSearchChange(e.target.value)}
             />
