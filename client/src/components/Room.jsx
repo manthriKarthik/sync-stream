@@ -9,7 +9,6 @@ import Player from './Player';
 import Queue from './Queue';
 import MembersPanel from './MembersPanel';
 import Upload from './Upload';
-import LiveCapture from './LiveCapture';
 import PlatformConnect from './PlatformConnect';
 
 function Room({ socket, roomState, setRoomState, username, onLeave }) {
@@ -72,9 +71,6 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
 
   const {
     isStreaming,
-    remoteStream,
-    startCapture,
-    stopCapture,
     sendOffer
   } = useWebRTC(socket, roomState?.id, isHost);
 
@@ -654,14 +650,6 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
         />
 
         <Upload roomId={roomState.id} userId={socket?.id} />
-        
-        {isHost && (
-          <LiveCapture
-            isStreaming={isStreaming}
-            onStartCapture={startCapture}
-            onStopCapture={stopCapture}
-          />
-        )}
 
         <h3 style={{ marginBottom: 16, fontSize: 16 }}>Queue</h3>
         <Queue
