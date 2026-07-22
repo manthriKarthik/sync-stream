@@ -58,6 +58,15 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
   // Sync we still need to apply once the queue arrives (a device that joins
   // mid-song can receive the sync before its queue is populated).
   const pendingPlatformRef = useRef(null);
+  // When THIS device just started a YouTube track from a tap gesture, we record
+  // it here. The sync/pending/drift effects then skip re-issuing playTrack for a
+  // short window so they don't interrupt the freshly-loading video (which would
+  // leave it silently blocked while the clock advances).
+  const recentGestureLoadRef = useRef({ videoId: null, at: 0 });
+  const justStartedInGesture = (videoId) => {
+    const g = recentGestureLoadRef.current;
+    return g.videoId === videoId && (Date.now() - g.at < 2500);
+  };
   // Reactive flag: is the room currently playing a platform (YouTube/Spotify)
   // track? Used to decide whether to show the "tap to play" prompt.
   const [platformPlaying, setPlatformPlaying] = useState(false);
@@ -226,7 +235,12 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
 
       if (track.platform === 'youtube') {
         if (state.playing) {
-          youtube.playTrack(track.uri, computePlatformPosition(state));
+          // Skip if this device just started the video from a tap gesture —
+          // re-issuing playTrack now would interrupt the fresh load and leave it
+          // blocked/silent.
+          if (!justStartedInGesture(track.uri)) {
+            youtube.playTrack(track.uri, computePlatformPosition(state));
+          }
         } else {
           youtube.pause();
         }
@@ -259,7 +273,9 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
     if (!track) return;
     pendingPlatformRef.current = null; // apply once; ongoing alignment is handled by the drift effect
     if (track.platform === 'youtube') {
-      youtube.playTrack(track.uri, computePlatformPosition(state));
+      if (!justStartedInGesture(track.uri)) {
+        youtube.playTrack(track.uri, computePlatformPosition(state));
+      }
     } else if (track.platform === 'spotify' && spotify.isConnected) {
       spotify.playTrack(track.uri, computePlatformPosition(state) * 1000);
     }
@@ -324,6 +340,7 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
     const id = setInterval(() => {
       const state = platformStateRef.current;
       if (!state || !state.playing) return;
+      if (justStartedInGesture(track.uri)) return; // let a fresh gesture-load settle
       const expected = computePlatformPosition(state);
       const actual = youtube.getPosition();
       if (typeof actual !== 'number' || actual <= 0) return;
@@ -350,6 +367,7 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
     const id = setInterval(() => {
       const state = platformStateRef.current;
       if (!state || !state.playing) return;
+      if (justStartedInGesture(track.uri)) return; // let a fresh gesture-load settle
       const { needsGesture, isVideoPlaying } = ytStatusRef.current;
       if (isVideoPlaying) return; // already playing — nothing to do
       // Don't force-restart a track that has essentially finished. When a song
@@ -408,6 +426,7 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
   // "changed the song but it doesn't play" when selecting from the queue.
   const startYouTubeInGesture = (track) => {
     if (track?.platform === 'youtube') {
+      recentGestureLoadRef.current = { videoId: track.uri, at: Date.now() };
       youtube.playTrack(track.uri, 0, true);
     }
   };
