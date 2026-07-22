@@ -285,6 +285,16 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
   // Poll the active platform player so the progress bar keeps moving for
   // YouTube/Spotify tracks (they don't use the shared <audio> element).
   const [platformProgress, setPlatformProgress] = useState({ time: 0, duration: 0 });
+
+  // Whenever the active track changes, reset the progress bar to the start
+  // immediately (Spotify-style). Polling then keeps it moving. This also runs
+  // for listeners whose track changed via a sync event (not a local tap).
+  useEffect(() => {
+    const track = queue[currentTrackIndex];
+    setPlatformProgress({ time: 0, duration: track?.duration ? track.duration / 1000 : 0 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentTrackIndex]);
+
   useEffect(() => {
     const track = queue[currentTrackIndex];
     if (!track) return;
@@ -302,9 +312,17 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
         // Fall back to the shared synced clock only when the local player isn't
         // reporting yet (blocked autoplay / still loading). Devices are kept
         // aligned by the separate drift-correction effect.
-        let t = (typeof local === 'number' && local > 0)
-          ? local
-          : (state ? computePlatformPosition(state) : 0);
+        let t;
+        if (typeof local === 'number' && local > 0) {
+          t = local;
+        } else if (justStartedInGesture(track.uri)) {
+          // Just switched to this track in a tap — the shared clock still points
+          // at the OLD song, so keep the bar at the start instead of snapping
+          // to the previous song's elapsed time.
+          t = 0;
+        } else {
+          t = state ? computePlatformPosition(state) : 0;
+        }
         const dur = d || (track.duration ? track.duration / 1000 : 0);
         if (dur > 0) t = Math.min(t, dur);
         setPlatformProgress({ time: t || 0, duration: dur });
@@ -428,6 +446,9 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
   // but it doesn't play" for YouTube AND Saavn/Audius/upload tracks.
   const startTrackInGesture = (track) => {
     if (!track) return;
+    // Snap the progress bar back to the start instantly (like Spotify) instead
+    // of leaving it at the previous song's position until polling catches up.
+    setPlatformProgress({ time: 0, duration: track.duration ? track.duration / 1000 : 0 });
     if (track.platform === 'youtube') {
       recentGestureLoadRef.current = { videoId: track.uri, at: Date.now() };
       youtube.playTrack(track.uri, 0, true);
