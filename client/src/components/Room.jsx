@@ -67,6 +67,9 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
     const g = recentGestureLoadRef.current;
     return g.videoId === videoId && (Date.now() - g.at < 2500);
   };
+  // Key (track.id||url) of the source currently loaded into the shared <audio>
+  // element, so we never reload/restart a track that's already loaded.
+  const lastLoadedUrlRef = useRef(null);
   // Reactive flag: is the room currently playing a platform (YouTube/Spotify)
   // track? Used to decide whether to show the "tap to play" prompt.
   const [platformPlaying, setPlatformPlaying] = useState(false);
@@ -144,7 +147,14 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
         // uploads). YouTube/Spotify play through their own SDKs and must NOT
         // pollute the shared audio element or they interfere with each other.
         if (nextTrack.url && nextTrack.platform !== 'youtube' && nextTrack.platform !== 'spotify') {
-          loadTrack(nextTrack.url);
+          // Don't reload a source that's already loaded (e.g. the controller
+          // just started it inside the tap gesture) — reloading restarts the
+          // audio and snaps the progress bar back to 0.
+          const key = nextTrack.id || nextTrack.url;
+          if (lastLoadedUrlRef.current !== key) {
+            lastLoadedUrlRef.current = key;
+            loadTrack(nextTrack.url);
+          }
         }
       }
     };
@@ -178,7 +188,6 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
   }, []);
 
   // Load initial track (handles both local and platform tracks)
-  const lastLoadedUrlRef = useRef(null);
   useEffect(() => {
     if (queue.length > 0 && queue[currentTrackIndex]) {
       const track = queue[currentTrackIndex];
