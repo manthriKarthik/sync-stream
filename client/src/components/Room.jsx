@@ -70,6 +70,9 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
   // Key (track.id||url) of the source currently loaded into the shared <audio>
   // element, so we never reload/restart a track that's already loaded.
   const lastLoadedUrlRef = useRef(null);
+  // Remembers the last user seek so polling holds the bar at the tapped spot
+  // until the platform player actually reports it (YouTube/Spotify seek async).
+  const recentSeekRef = useRef({ time: 0, at: 0 });
   // Reactive flag: is the room currently playing a platform (YouTube/Spotify)
   // track? Used to decide whether to show the "tap to play" prompt.
   const [platformPlaying, setPlatformPlaying] = useState(false);
@@ -316,13 +319,19 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
         const d = youtube.getDuration();
         const local = youtube.getPosition();
         const state = platformStateRef.current;
+        const sk = recentSeekRef.current;
+        const seeking = Date.now() - sk.at < 1500;
         // Prefer THIS device's real player position so the timer/bar match what
         // the listener actually hears (no running ahead of a buffering player).
         // Fall back to the shared synced clock only when the local player isn't
         // reporting yet (blocked autoplay / still loading). Devices are kept
         // aligned by the separate drift-correction effect.
         let t;
-        if (typeof local === 'number' && local > 0) {
+        if (seeking && (typeof local !== 'number' || Math.abs(local - sk.time) > 1.5)) {
+          // Just seeked here — hold the bar at the tapped position until the
+          // player actually catches up, so it doesn't snap back behind.
+          t = sk.time;
+        } else if (typeof local === 'number' && local > 0) {
           t = local;
         } else if (justStartedInGesture(track.uri)) {
           // Just switched to this track in a tap — the shared clock still points
@@ -341,9 +350,15 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
         const p = await spotify.getPosition();
         if (cancelled) return;
         const state = platformStateRef.current;
-        let t = (typeof p === 'number' && p > 0)
-          ? p / 1000
-          : (state ? computePlatformPosition(state) : 0);
+        const sk = recentSeekRef.current;
+        const seeking = Date.now() - sk.at < 1500;
+        const localSec = (typeof p === 'number' && p > 0) ? p / 1000 : null;
+        let t;
+        if (seeking && (localSec === null || Math.abs(localSec - sk.time) > 1.5)) {
+          t = sk.time;
+        } else {
+          t = localSec !== null ? localSec : (state ? computePlatformPosition(state) : 0);
+        }
         const dur = track.duration ? track.duration / 1000 : 0;
         if (dur > 0) t = Math.min(t, dur);
         setPlatformProgress({ time: t || 0, duration: dur });
@@ -478,6 +493,10 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
 
   const handleSeek = (time) => {
     if (!canControl) return;
+    // Remember the seek so the poll holds the bar here until the player catches
+    // up (platform players seek asynchronously and report the old position for
+    // a moment, which would otherwise snap the bar back behind the tap).
+    recentSeekRef.current = { time, at: Date.now() };
     // Optimistically reflect the new position locally so the seeker's progress
     // bar jumps instantly instead of waiting for the server round-trip.
     if (isPlatformTrack) {
@@ -859,7 +878,6 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
         onPrev={handlePrev}
         onVolumeChange={setVolume}
         canControl={canControl}
-        audioElement={audioRef.current}
       />
     </div>
   );

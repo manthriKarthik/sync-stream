@@ -1,52 +1,8 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef } from 'react';
 
-function Player({ isPlaying, currentTime, duration, currentTrack, onPlay, onPause, onSeek, onNext, onPrev, onVolumeChange, canControl, audioElement }) {
+function Player({ isPlaying, currentTime, duration, currentTrack, onPlay, onPause, onSeek, onNext, onPrev, onVolumeChange, canControl }) {
   const [volume, setVolume] = useState(1);
-  const [outputDevices, setOutputDevices] = useState([]);
-  const [selectedDevice, setSelectedDevice] = useState('default');
-  const [showDevices, setShowDevices] = useState(false);
   const progressRef = useRef(null);
-
-  // Enumerate audio output devices
-  useEffect(() => {
-    const loadDevices = async () => {
-      try {
-        // Request permission to enumerate devices (some browsers need this)
-        await navigator.mediaDevices.getUserMedia({ audio: true })
-          .then(stream => stream.getTracks().forEach(t => t.stop()))
-          .catch(() => {}); // Permission denied is ok, we'll still get some devices
-
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        const outputs = devices.filter(d => d.kind === 'audiooutput');
-        setOutputDevices(outputs);
-      } catch (err) {
-        console.log('Device enumeration not supported:', err);
-      }
-    };
-
-    loadDevices();
-
-    // Re-enumerate when devices change (e.g. Bluetooth connects/disconnects)
-    navigator.mediaDevices.addEventListener('devicechange', loadDevices);
-    return () => navigator.mediaDevices.removeEventListener('devicechange', loadDevices);
-  }, []);
-
-  // Switch audio output device
-  const handleDeviceChange = async (deviceId) => {
-    setSelectedDevice(deviceId);
-    setShowDevices(false);
-
-    if (audioElement && typeof audioElement.setSinkId === 'function') {
-      try {
-        await audioElement.setSinkId(deviceId);
-      } catch (err) {
-        console.error('Failed to set output device:', err);
-        alert('Could not switch output device. Your browser may not support this feature.');
-      }
-    } else {
-      alert('Output device selection is not supported in this browser. Audio will play through your default device.');
-    }
-  };
 
   const formatTime = (seconds) => {
     if (!seconds || isNaN(seconds)) return '0:00';
@@ -137,7 +93,7 @@ function Player({ isPlaying, currentTime, duration, currentTrack, onPlay, onPaus
         </div>
       </div>
 
-      {/* Right: volume + output device */}
+      {/* Right: volume */}
       <div className="player-extra">
         <div className="player-volume">
           <span className="player-volume-icon">🔊</span>
@@ -151,33 +107,6 @@ function Player({ isPlaying, currentTime, duration, currentTrack, onPlay, onPaus
             className="volume-slider"
           />
         </div>
-
-        {outputDevices.length > 0 && (
-          <div className="player-device">
-            <button
-              className="btn-icon device-btn"
-              onClick={() => setShowDevices(!showDevices)}
-              title="Select audio output device"
-            >
-              🎧
-            </button>
-            {showDevices && (
-              <div className="device-menu">
-                <div className="device-menu-title">Output Device</div>
-                {outputDevices.map((device) => (
-                  <button
-                    key={device.deviceId}
-                    onClick={() => handleDeviceChange(device.deviceId)}
-                    className={`device-item ${selectedDevice === device.deviceId ? 'active' : ''}`}
-                  >
-                    {selectedDevice === device.deviceId && '✓ '}
-                    {device.label || `Device ${device.deviceId.slice(0, 8)}`}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
       </div>
     </div>
   );
