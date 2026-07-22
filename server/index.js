@@ -395,6 +395,176 @@ app.get('/api/saavn/search', async (req, res) => {
 });
 
 
+// --- SoundCloud (free, huge English catalog, direct progressive MP3 streams) ---
+// SoundCloud's public API needs a `client_id`, which is embedded in their web
+// player's JS bundle. We scrape it once and cache it. Progressive transcodings
+// resolve to a plain MP3 URL that plays through the shared <audio> element, so
+// SoundCloud tracks get full drift-corrected sync + background playback for 3+
+// listeners (unlike YouTube). Great for filling the English-song gap.
+let scClientId = null;
+let scClientIdAt = 0;
+
+async function getSoundCloudClientId() {
+  // Reuse a cached id for 6 hours (it rarely changes).
+  if (scClientId && Date.now() - scClientIdAt < 6 * 60 * 60 * 1000) return scClientId;
+  const ua = { 'User-Agent': 'Mozilla/5.0' };
+  const home = await fetch('https://soundcloud.com/', { headers: ua });
+  const html = await home.text();
+  const scriptUrls = [...html.matchAll(/<script[^>]+src="([^"]+)"/g)].map(m => m[1]);
+  // The client_id lives in one of the later bundles — check newest first.
+  for (const url of scriptUrls.reverse()) {
+    try {
+      const js = await (await fetch(url, { headers: ua })).text();
+      const m = js.match(/client_id\s*[:=]\s*"([a-zA-Z0-9]{32})"/);
+      if (m) { scClientId = m[1]; scClientIdAt = Date.now(); return scClientId; }
+    } catch (_) { /* try next bundle */ }
+  }
+  throw new Error('Could not resolve SoundCloud client_id');
+}
+
+app.get('/api/soundcloud/search', async (req, res) => {
+  const query = req.query.q;
+  if (!query) return res.json({ results: [] });
+  try {
+    const clientId = await getSoundCloudClientId();
+    const ua = { 'User-Agent': 'Mozilla/5.0' };
+    const url = `https://api-v2.soundcloud.com/search/tracks?q=${encodeURIComponent(query)}` +
+      `&client_id=${clientId}&limit=20`;
+    const response = await fetch(url, { headers: ua });
+    if (!response.ok) throw new Error(`SoundCloud search failed: ${response.status}`);
+    const data = await response.json();
+    const collection = data.collection || [];
+
+    const results = await Promise.all(collection.map(async (t) => {
+      try {
+        if (t.policy === 'BLOCK' || t.streamable === false) return null;
+        // Prefer a progressive (plain MP3) transcoding so it plays in <audio>.
+        const progressive = (t.media?.transcodings || [])
+          .find(tr => tr.format?.protocol === 'progressive');
+        if (!progressive) return null;
+        const streamRes = await fetch(`${progressive.url}?client_id=${clientId}`, { headers: ua });
+        if (!streamRes.ok) return null;
+        const streamData = await streamRes.json();
+        const streamUrl = streamData.url;
+        if (!streamUrl) return null;
+
+        const durationSec = Math.round((t.full_duration || t.duration || 0) / 1000);
+        const mins = Math.floor(durationSec / 60);
+        const secs = durationSec % 60;
+        const art = (t.artwork_url || t.user?.avatar_url || '').replace('-large', '-t500x500');
+
+        return {
+          id: `sc-${t.id}`,
+          uri: `sc-${t.id}`,
+          name: t.title || 'Unknown',
+          artist: t.user?.username || 'Unknown',
+          album: '',
+          albumArt: art,
+          url: streamUrl, // progressive MP3 → shared <audio>, full sync + background
+          duration: durationSec * 1000,
+          durationText: `${mins}:${secs.toString().padStart(2, '0')}`,
+          platform: 'soundcloud'
+        };
+      } catch (_) { return null; }
+    }));
+
+    res.json({ results: results.filter(Boolean) });
+  } catch (err) {
+    console.error('SoundCloud search error:', err.message);
+    res.json({ results: [] });
+  }
+});
+
+
+// --- Gaana (large Indian + some English catalog, HLS streams) ---
+// Gaana returns AES-encrypted stream URLs that decrypt to an HLS (.m3u8)
+// playlist. The client plays these through the shared <audio> element using
+// hls.js, so Gaana tracks also sync for 3+ listeners. Unofficial endpoint —
+// may break over time.
+const GAANA_AES_KEY = 'g@1n!(f1#r.0$)&%';
+const GAANA_AES_IV = 'asd!@#!@#@!12312';
+
+function decryptGaanaUrl(encrypted) {
+  try {
+    const decipher = crypto.createDecipheriv('aes-128-cbc', Buffer.from(GAANA_AES_KEY), Buffer.from(GAANA_AES_IV));
+    decipher.setAutoPadding(true);
+    let decrypted = decipher.update(encrypted, 'base64', 'utf8');
+    decrypted += decipher.final('utf8');
+    return decrypted;
+  } catch (_) {
+    return null;
+  }
+}
+
+function mapGaanaSong(song) {
+  const encrypted = song?.urls?.high?.message || song?.urls?.medium?.message || song?.urls?.auto?.message;
+  const url = encrypted ? decryptGaanaUrl(encrypted) : null;
+
+  let artist = 'Unknown';
+  if (Array.isArray(song.artist) && song.artist.length) {
+    artist = song.artist.map(a => decodeEntities(a.name || a.seokey || '')).filter(Boolean).join(', ');
+  } else if (typeof song.artist === 'string') {
+    artist = decodeEntities(song.artist);
+  }
+
+  const durationSec = Number(song.duration || 0);
+  const mins = Math.floor(durationSec / 60);
+  const secs = durationSec % 60;
+  const art = (song.artwork || song.atw || '').replace(/175x175|80x80/g, '480x480');
+
+  return {
+    id: `gaana-${song.track_id || song.seokey}`,
+    uri: `gaana-${song.track_id || song.seokey}`,
+    name: decodeEntities(song.track_title || song.title || 'Unknown'),
+    artist: artist || 'Unknown',
+    album: decodeEntities(song.album_title || ''),
+    albumArt: art,
+    url, // HLS (.m3u8) → played via hls.js into the shared <audio>
+    duration: durationSec * 1000,
+    durationText: `${mins}:${secs.toString().padStart(2, '0')}`,
+    platform: 'gaana'
+  };
+}
+
+app.get('/api/gaana/search', async (req, res) => {
+  const query = req.query.q;
+  if (!query) return res.json({ results: [] });
+  try {
+    const ua = {
+      'User-Agent': 'Mozilla/5.0',
+      'Accept': 'application/json',
+      'Referer': 'https://gaana.com/'
+    };
+    // Search for song seokeys, then fetch full song details (which include the
+    // encrypted stream URLs) for each.
+    const searchUrl = 'https://apiv2.gaana.com/search/song/most-popular?keyword=' +
+      encodeURIComponent(query) + '&page=0&limit=15';
+    const searchRes = await fetch(searchUrl, { headers: ua });
+    if (!searchRes.ok) throw new Error(`Gaana search failed: ${searchRes.status}`);
+    const searchData = await searchRes.json();
+    const items = searchData?.gr || searchData?.tracks || searchData?.data || [];
+
+    const details = await Promise.all(items.slice(0, 15).map(async (it) => {
+      const seokey = it.seokey || it.seo_key;
+      if (!seokey) return null;
+      try {
+        const detailUrl = 'https://apiv2.gaana.com/song/detail?seokey=' + encodeURIComponent(seokey);
+        const dRes = await fetch(detailUrl, { headers: ua });
+        if (!dRes.ok) return null;
+        const dData = await dRes.json();
+        const song = (dData?.tracks && dData.tracks[0]) || dData?.track || dData;
+        return song ? mapGaanaSong(song) : null;
+      } catch (_) { return null; }
+    }));
+
+    res.json({ results: details.filter(t => t && t.url) });
+  } catch (err) {
+    console.error('Gaana search error:', err.message);
+    res.json({ results: [] });
+  }
+});
+
+
 // Socket.IO handling
 io.on('connection', (socket) => {
   console.log(`Client connected: ${socket.id}`);

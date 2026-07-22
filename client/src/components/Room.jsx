@@ -5,6 +5,8 @@ import { useSpotify } from '../hooks/useSpotify';
 import { useYouTube } from '../hooks/useYouTube';
 import { useAudius } from '../hooks/useAudius';
 import { useSaavn } from '../hooks/useSaavn';
+import { useSoundCloud } from '../hooks/useSoundCloud';
+import { useGaana } from '../hooks/useGaana';
 import Player from './Player';
 import Queue from './Queue';
 import MembersPanel from './MembersPanel';
@@ -51,6 +53,8 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
   const youtube = useYouTube(handleTrackEnded);
   const audius = useAudius();
   const saavn = useSaavn();
+  const soundcloud = useSoundCloud();
+  const gaana = useGaana();
 
   // Latest playback state for platform tracks, so a listener "tap to play"
   // can resume at the correct synced position.
@@ -473,14 +477,25 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
     // Snap the progress bar back to the start instantly (like Spotify) instead
     // of leaving it at the previous song's position until polling catches up.
     setPlatformProgress({ time: 0, duration: track.duration ? track.duration / 1000 : 0 });
+    const isSharedTrack = !!track.url && track.platform !== 'youtube' && track.platform !== 'spotify';
+    // Stop every OTHER engine right away so the previous song (which may run on a
+    // different engine — e.g. switching a YouTube song to a Saavn one) doesn't
+    // keep playing/overlapping during the socket round-trip. Only the engine for
+    // the new track is left running.
+    try { if (!isSharedTrack) setSharedActive(false); } catch (_) { /* ignore */ }
+    if (track.platform !== 'youtube') { try { youtube.pause(); } catch (_) { /* ignore */ } }
+    if (track.platform !== 'spotify') { try { spotify.pause(); } catch (_) { /* ignore */ } }
+
     if (track.platform === 'youtube') {
       recentGestureLoadRef.current = { videoId: track.uri, at: Date.now() };
       youtube.playTrack(track.uri, 0, true);
-    } else if (track.url && track.platform !== 'spotify') {
-      // Shared <audio> tracks (Saavn / Audius / upload): load + play the new
-      // source inside this gesture. Set lastLoadedUrlRef so the "load initial
-      // track" effect doesn't reload it a second time and cut it off.
+    } else if (isSharedTrack) {
+      // Shared <audio> tracks (Saavn / Audius / SoundCloud / Gaana / upload):
+      // load + play the new source inside this gesture. Set lastLoadedUrlRef so
+      // the "load initial track" effect doesn't reload it a second time and cut
+      // it off, and mark the shared engine active so it accepts sync.
       try {
+        setSharedActive(true);
         const a = audioRef.current;
         if (a) {
           loadTrack(track.url);
@@ -839,6 +854,8 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
           youtube={youtube}
           audius={audius}
           saavn={saavn}
+          soundcloud={soundcloud}
+          gaana={gaana}
           roomId={roomState.id}
           userId={socket?.id}
           onTrackSelected={handlePlatformTrackSelected}

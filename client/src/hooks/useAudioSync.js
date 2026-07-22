@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
+import Hls from 'hls.js';
 
 /**
  * Audio synchronization engine - v2 (optimized for remote/cross-network sync).
@@ -23,6 +24,9 @@ export function useAudioSync(socket, onEnded) {
   const syncIntervalRef = useRef(null);
   const driftCheckRef = useRef(null);
   const animFrameRef = useRef(null);
+  // Active hls.js instance, when the current track is an HLS (.m3u8) stream
+  // (e.g. Gaana). Torn down and recreated on each load.
+  const hlsRef = useRef(null);
   const playbackStateRef = useRef(null);
   const offsetSamplesRef = useRef([]);
   // Timestamp of the last hard seek, to rate-limit hard seeks (avoids the iOS
@@ -258,10 +262,34 @@ export function useAudioSync(socket, onEnded) {
 
   const loadTrack = useCallback((url) => {
     const audio = audioRef.current;
-    audio.src = url;
-    audio.load();
+    // Tear down any previous HLS instance before loading a new source.
+    if (hlsRef.current) {
+      try { hlsRef.current.destroy(); } catch (_) { /* ignore */ }
+      hlsRef.current = null;
+    }
+    const isHls = /\.m3u8(\?|$)/i.test(url || '');
+    const nativeHls = audio.canPlayType('application/vnd.apple.mpegurl');
+    if (isHls && !nativeHls && Hls.isSupported()) {
+      // Chrome / Android: play HLS via hls.js attached to the shared <audio>.
+      const hls = new Hls({ enableWorker: true });
+      hlsRef.current = hls;
+      hls.loadSource(url);
+      hls.attachMedia(audio);
+    } else {
+      // Native HLS (Safari/iOS) or a plain MP3/MP4 progressive stream.
+      audio.src = url;
+      audio.load();
+    }
     setCurrentTrackUrl(url);
     setCurrentTime(0);
+  }, []);
+
+  // Clean up the HLS instance when the hook unmounts.
+  useEffect(() => () => {
+    if (hlsRef.current) {
+      try { hlsRef.current.destroy(); } catch (_) { /* ignore */ }
+      hlsRef.current = null;
+    }
   }, []);
 
   const play = useCallback(() => {
