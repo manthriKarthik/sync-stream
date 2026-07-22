@@ -1,65 +1,13 @@
 import { useState, useCallback } from 'react';
 import Upload from './Upload';
-
-// Small inline brand logos shown beside each platform tab.
-function AudiusLogo() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
-      <rect width="24" height="24" rx="6" fill="#CC0FE0" />
-      <path fill="#fff" d="M12 5l6 11h-3.4L12 10.8 9.4 16H6z" />
-    </svg>
-  );
-}
-
-function SaavnLogo() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
-      <defs>
-        <linearGradient id="saavnGrad" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#2BC5B4" />
-          <stop offset="1" stopColor="#1E9E8F" />
-        </linearGradient>
-      </defs>
-      <rect width="24" height="24" rx="6" fill="url(#saavnGrad)" />
-      <path fill="#fff" d="M14.5 6v7.6a2.6 2.6 0 1 1-1.5-2.4V8.2l-4 1v5.2a2.6 2.6 0 1 1-1.5-2.4V8.5z" />
-    </svg>
-  );
-}
-
-function YouTubeLogo() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
-      <path fill="#FF0000" d="M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.6 12 3.6 12 3.6s-7.5 0-9.4.5A3 3 0 0 0 .5 6.2 31.1 31.1 0 0 0 0 12a31.1 31.1 0 0 0 .5 5.8 3 3 0 0 0 2.1 2.1c1.9.5 9.4.5 9.4.5s7.5 0 9.4-.5a3 3 0 0 0 2.1-2.1A31.1 31.1 0 0 0 24 12a31.1 31.1 0 0 0-.5-5.8z" />
-      <path fill="#fff" d="M9.6 15.6V8.4l6.2 3.6z" />
-    </svg>
-  );
-}
-
-function SpotifyLogo() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
-      <circle cx="12" cy="12" r="12" fill="#1DB954" />
-      <path fill="#000" d="M17.6 10.9C14.6 9.1 9.6 8.9 6.7 9.8a.9.9 0 1 1-.5-1.7c3.3-1 8.8-.8 12.2 1.3a.9.9 0 0 1-.8 1.5zm-.1 2.7c-.3.4-.7.6-1.1.3-2.5-1.5-6.3-2-9.2-1.1a.75.75 0 0 1-.4-1.4c3.4-1 7.6-.5 10.5 1.3.3.2.4.6.2 1zm-1.2 2.5c-.2.3-.5.4-.8.2-2.2-1.3-4.9-1.6-8.1-.9a.63.63 0 1 1-.3-1.2c3.5-.8 6.5-.4 9 1.1.3.2.4.5.2.8z" />
-    </svg>
-  );
-}
-
-function UploadLogo() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
-      <rect width="24" height="24" rx="6" fill="#6366f1" />
-      <path fill="#fff" d="M12 6l4 4h-2.5v4h-3v-4H8z" />
-      <rect x="7.5" y="16" width="9" height="1.8" rx="0.9" fill="#fff" />
-    </svg>
-  );
-}
+import PlatformLogo from './PlatformLogo';
 
 const TABS = [
-  { id: 'audius', label: 'Audius', logo: <AudiusLogo /> },
-  { id: 'saavn', label: 'Saavn', logo: <SaavnLogo /> },
-  { id: 'youtube', label: 'YouTube', logo: <YouTubeLogo /> },
-  { id: 'spotify', label: 'Spotify', logo: <SpotifyLogo /> },
-  { id: 'upload', label: 'Upload', logo: <UploadLogo /> }
+  { id: 'audius', label: 'Audius' },
+  { id: 'saavn', label: 'Saavn' },
+  { id: 'youtube', label: 'YouTube' },
+  { id: 'spotify', label: 'Spotify' },
+  { id: 'upload', label: 'Upload' }
 ];
 
 function PlatformConnect({ spotify, youtube, audius, saavn, roomId, userId, onTrackSelected, canControl }) {
@@ -206,7 +154,7 @@ function PlatformConnect({ spotify, youtube, audius, saavn, roomId, userId, onTr
             className={`platform-tab ${activeTab === t.id ? 'active' : ''}`}
             onClick={() => setActiveTab(t.id)}
           >
-            <span className="platform-tab-logo">{t.logo}</span>
+            <span className="platform-tab-logo"><PlatformLogo platform={t.id} size={18} /></span>
             <span>{t.label}</span>
           </button>
         ))}

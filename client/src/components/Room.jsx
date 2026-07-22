@@ -252,33 +252,31 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
     if (track.platform === 'youtube') {
       intervalId = setInterval(() => {
         const d = youtube.getDuration();
-        // Drive the progress bar from the SHARED synced clock (server state +
-        // clock offset) so every device's bar agrees and reflects seeks/
-        // restarts immediately — even if this device's player is blocked,
-        // buffering, or stale. Fall back to the local player only when we have
-        // no shared state yet.
+        const local = youtube.getPosition();
         const state = platformStateRef.current;
-        const t = state ? computePlatformPosition(state) : (youtube.getPosition() || 0);
-        setPlatformProgress({
-          time: t || 0,
-          duration: d || (track.duration ? track.duration / 1000 : 0)
-        });
+        // Prefer THIS device's real player position so the timer/bar match what
+        // the listener actually hears (no running ahead of a buffering player).
+        // Fall back to the shared synced clock only when the local player isn't
+        // reporting yet (blocked autoplay / still loading). Devices are kept
+        // aligned by the separate drift-correction effect.
+        let t = (typeof local === 'number' && local > 0)
+          ? local
+          : (state ? computePlatformPosition(state) : 0);
+        const dur = d || (track.duration ? track.duration / 1000 : 0);
+        if (dur > 0) t = Math.min(t, dur);
+        setPlatformProgress({ time: t || 0, duration: dur });
       }, 250);
     } else if (track.platform === 'spotify') {
       intervalId = setInterval(async () => {
-        const state = platformStateRef.current;
-        let t;
-        if (state) {
-          t = computePlatformPosition(state);
-        } else {
-          const p = await spotify.getPosition();
-          t = (p || 0) / 1000;
-        }
+        const p = await spotify.getPosition();
         if (cancelled) return;
-        setPlatformProgress({
-          time: t || 0,
-          duration: track.duration ? track.duration / 1000 : 0
-        });
+        const state = platformStateRef.current;
+        let t = (typeof p === 'number' && p > 0)
+          ? p / 1000
+          : (state ? computePlatformPosition(state) : 0);
+        const dur = track.duration ? track.duration / 1000 : 0;
+        if (dur > 0) t = Math.min(t, dur);
+        setPlatformProgress({ time: t || 0, duration: dur });
       }, 500);
     }
 

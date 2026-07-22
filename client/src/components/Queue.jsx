@@ -1,3 +1,5 @@
+import PlatformLogo from './PlatformLogo';
+
 function Queue({ queue, currentIndex, onSelect, onRemove, canControl }) {
   if (queue.length === 0) {
     return (
@@ -8,15 +10,6 @@ function Queue({ queue, currentIndex, onSelect, onRemove, canControl }) {
       </div>
     );
   }
-
-  const getPlatformIcon = (platform) => {
-    switch (platform) {
-      case 'youtube': return '▶';
-      case 'spotify': return '🟢';
-      case 'audius': return '🎧';
-      default: return '📁';
-    }
-  };
 
   return (
     <ul className="queue-list">
@@ -38,7 +31,8 @@ function Queue({ queue, currentIndex, onSelect, onRemove, canControl }) {
           )}
           <div className="track-info">
             <div className="name">
-              {getPlatformIcon(track.platform)} {track.name}
+              <span className="queue-platform-logo"><PlatformLogo platform={track.platform} size={15} /></span>
+              {track.name}
             </div>
             <div className="added-by">
               {track.artist ? `${track.artist} • ` : ''}Added by {track.addedBy}

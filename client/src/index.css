@@ -607,6 +607,18 @@ input {
   text-overflow: ellipsis;
 }
 
+.queue-platform-logo {
+  display: inline-flex;
+  vertical-align: middle;
+  margin-right: 6px;
+  position: relative;
+  top: -1px;
+}
+
+.queue-platform-logo svg {
+  display: block;
+}
+
 .queue-item .track-info .added-by {
   font-size: 11px;
   color: var(--text-muted);
