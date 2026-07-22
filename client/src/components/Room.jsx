@@ -420,14 +420,29 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
     socket.emit('playback:pause', { roomId: roomState.id });
   };
 
-  // YouTube's iframe must be kicked off inside the tap gesture, or mobile
-  // browsers keep it silent/background until the next real gesture (resume) —
-  // which then jumps ahead by the elapsed synced time. Starting it here fixes
-  // "changed the song but it doesn't play" when selecting from the queue.
-  const startYouTubeInGesture = (track) => {
-    if (track?.platform === 'youtube') {
+  // Any player (YouTube iframe OR the shared <audio> element) must be kicked
+  // off inside the tap gesture, or mobile browsers keep it silent/background
+  // until the next real gesture (resume) — which then jumps ahead by the
+  // elapsed synced time. Waiting for the socket round-trip lands the play()
+  // outside the gesture, so we start it directly here. Fixes "changed the song
+  // but it doesn't play" for YouTube AND Saavn/Audius/upload tracks.
+  const startTrackInGesture = (track) => {
+    if (!track) return;
+    if (track.platform === 'youtube') {
       recentGestureLoadRef.current = { videoId: track.uri, at: Date.now() };
       youtube.playTrack(track.uri, 0, true);
+    } else if (track.url && track.platform !== 'spotify') {
+      // Shared <audio> tracks (Saavn / Audius / upload): load + play the new
+      // source inside this gesture. Set lastLoadedUrlRef so the "load initial
+      // track" effect doesn't reload it a second time and cut it off.
+      try {
+        const a = audioRef.current;
+        if (a) {
+          loadTrack(track.url);
+          lastLoadedUrlRef.current = track.id || track.url;
+          a.play().catch(() => {});
+        }
+      } catch (_) { /* ignore */ }
     }
   };
 
@@ -447,7 +462,7 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
     if (!canControl || queue.length === 0) return;
     spotify.activate();
     const nextIndex = (currentTrackIndex + 1) % queue.length;
-    startYouTubeInGesture(queue[nextIndex]);
+    startTrackInGesture(queue[nextIndex]);
     socket.emit('playback:next', { roomId: roomState.id });
   };
 
@@ -455,7 +470,7 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
     if (!canControl || queue.length === 0) return;
     spotify.activate();
     const prevIndex = currentTrackIndex === 0 ? queue.length - 1 : currentTrackIndex - 1;
-    startYouTubeInGesture(queue[prevIndex]);
+    startTrackInGesture(queue[prevIndex]);
     socket.emit('playback:play', {
       roomId: roomState.id,
       trackIndex: prevIndex,
@@ -466,7 +481,7 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
   const handleTrackSelect = (index) => {
     if (!canControl) return;
     spotify.activate();
-    startYouTubeInGesture(queue[index]);
+    startTrackInGesture(queue[index]);
     socket.emit('playback:play', {
       roomId: roomState.id,
       trackIndex: index,
