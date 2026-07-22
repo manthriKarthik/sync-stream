@@ -155,6 +155,7 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
   }, [socket, isHost, isStreaming, currentTrackIndex, queue, onLeave]);
 
   // Load initial track (handles both local and platform tracks)
+  const lastLoadedUrlRef = useRef(null);
   useEffect(() => {
     if (queue.length > 0 && queue[currentTrackIndex]) {
       const track = queue[currentTrackIndex];
@@ -162,7 +163,14 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
         // Platform tracks are played via their respective SDKs
         // The sync event will trigger playback on each client
       } else if (track.url) {
-        loadTrack(track.url);
+        // Only (re)load when the track actually changed. Otherwise adding a new
+        // song to the queue re-runs this effect and reloads the shared <audio>,
+        // which stops the song that's currently playing.
+        const key = track.id || track.url;
+        if (lastLoadedUrlRef.current !== key) {
+          lastLoadedUrlRef.current = key;
+          loadTrack(track.url);
+        }
       }
     }
   }, [queue, currentTrackIndex, loadTrack]);
@@ -314,7 +322,31 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [queue, currentTrackIndex]);
 
-  // Ask the server for the current playback state on mount, so a device that
+  // Auto-start YouTube on this device without a manual tap. Once the listener
+  // has enabled audio (the one-time overlay), we keep retrying automatically so
+  // a track that got blocked, joined mid-song, or came back from the background
+  // just resumes on its own — no "tap to play" pill needed.
+  const ytStatusRef = useRef({ needsGesture: false, isVideoPlaying: false });
+  ytStatusRef.current = { needsGesture: youtube.needsGesture, isVideoPlaying: youtube.isVideoPlaying };
+  useEffect(() => {
+    if (!audioEnabled) return;
+    const track = queue[currentTrackIndex];
+    if (!track || track.platform !== 'youtube') return;
+
+    const id = setInterval(() => {
+      const state = platformStateRef.current;
+      if (!state || !state.playing) return;
+      const { needsGesture, isVideoPlaying } = ytStatusRef.current;
+      if (needsGesture || !isVideoPlaying) {
+        // fromGesture=false: resume/seek without a full reload so it doesn't stutter.
+        youtube.playTrack(track.uri, computePlatformPosition(state), false);
+      }
+    }, 2000);
+
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queue, currentTrackIndex, audioEnabled]);
+
   // joins mid-song (2nd, 3rd, ... listener) starts playing in sync instead of
   // sitting silent until the next host action.
   useEffect(() => {
@@ -333,10 +365,15 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
     if (!canControl) return;
     // Unlock the Spotify SDK audio element on this device (must be in a gesture)
     spotify.activate();
+    // For YouTube/Spotify tracks the shared <audio> currentTime is meaningless,
+    // so resume from the real platform position instead of snapping to 0/stale.
+    const position = isPlatformTrack
+      ? (platformProgress.time || platformStateRef.current?.position || 0)
+      : currentTime;
     socket.emit('playback:play', {
       roomId: roomState.id,
       trackIndex: currentTrackIndex,
-      position: currentTime
+      position
     });
   };
 
@@ -445,20 +482,8 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
     setSpotifyActivated(true);
   };
 
-  // Listener tap to start YouTube playback when the browser blocked autoplay.
-  const handleYouTubeTap = () => {
-    const track = queue[currentTrackIndex];
-    if (!track || track.platform !== 'youtube') return;
-    // Runs inside a user gesture, so the browser allows playback with sound.
-    // Force a fresh load so a blocked/paused player definitely starts here.
-    // (playTrack with fromGesture already marks the player unlocked; calling
-    // unlock() here would schedule a pauseVideo that stops playback again.)
-    youtube.playTrack(track.uri, computePlatformPosition(platformStateRef.current), true);
-    // Re-sync to the group position right after starting.
-    if (socket && roomState?.id) {
-      socket.emit('playback:request-sync', { roomId: roomState.id });
-    }
-  };
+  // Listener tap to start YouTube playback is no longer needed — the auto-start
+  // effect retries playback automatically once audio is enabled on the device.
 
   // --- Media Session: lock-screen / background controls (mobile) ---
   // Shows play/pause/next/prev on the lock screen & notification shade, and
@@ -592,35 +617,9 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
           🔊 Tap to enable Spotify sound on this device
         </div>
       )}
-      {/* YouTube tap-to-play prompt (browser blocked autoplay on this device).
-          Shown whenever the room is playing a YouTube track but this device's
-          player isn't actually playing — covers blocked autoplay, joining
-          mid-song, and coming back from the background. */}
-      {audioEnabled && isPlatformTrack && activeTrack?.platform === 'youtube' &&
-        platformPlaying && (youtube.needsGesture || !youtube.isVideoPlaying) && (
-        <div
-          style={{
-            position: 'fixed',
-            bottom: 100,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            zIndex: 9998,
-            background: '#ff0000',
-            color: '#fff',
-            borderRadius: 999,
-            padding: '12px 24px',
-            boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            fontWeight: 600
-          }}
-          onClick={handleYouTubeTap}
-        >
-          ▶ Tap to play the music on this device
-        </div>
-      )}
+      {/* YouTube auto-plays on this device once audio is enabled — the old
+          manual "tap to play" pill was removed in favour of automatic retry
+          (see the auto-start effect above). */}
       {/* Header */}
       <div className="room-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>

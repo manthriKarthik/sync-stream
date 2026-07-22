@@ -13,6 +13,7 @@ const TABS = [
 function PlatformConnect({ spotify, youtube, audius, saavn, roomId, userId, onTrackSelected, canControl }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
+  const [addedIds, setAddedIds] = useState(() => new Set());
   const [searching, setSearching] = useState(false);
   const [activeTab, setActiveTab] = useState('audius');
   const [showPanel, setShowPanel] = useState(false);
@@ -52,6 +53,13 @@ function PlatformConnect({ spotify, youtube, audius, saavn, roomId, userId, onTr
 
   const handleSelectTrack = (track) => {
     onTrackSelected(track);
+    // Mark this song as added so the button shows a green "Added" state; the
+    // user can still add it again via the "Add again" button.
+    setAddedIds((prev) => {
+      const next = new Set(prev);
+      next.add(track.id);
+      return next;
+    });
     // Keep search results visible so user can add more songs
     // Don't clear: setSearchResults([]);
     // Don't clear: setSearchQuery('');
@@ -307,17 +315,17 @@ function PlatformConnect({ spotify, youtube, audius, saavn, roomId, userId, onTr
       {/* Search Results */}
       {activeTab !== 'upload' && searchResults.length > 0 && (
         <div style={{ maxHeight: 300, overflowY: 'auto', marginTop: 12 }}>
-          {searchResults.map((track) => (
+          {searchResults.map((track) => {
+            const isAdded = addedIds.has(track.id);
+            return (
             <div
               key={track.id}
-              onClick={() => handleSelectTrack(track)}
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 gap: 12,
                 padding: '8px 10px',
                 borderRadius: 8,
-                cursor: 'pointer',
                 transition: 'background 0.2s'
               }}
               onMouseOver={(e) => e.currentTarget.style.background = 'var(--bg-tertiary)'}
@@ -338,11 +346,54 @@ function PlatformConnect({ spotify, youtube, audius, saavn, roomId, userId, onTr
                   {track.artist}{track.durationText ? ` • ${track.durationText}` : ''}
                 </div>
               </div>
-              <button className="btn btn-primary" style={{ padding: '4px 10px', fontSize: 11 }}>
-                + Add
-              </button>
+              {isAdded ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      padding: '4px 10px',
+                      fontSize: 11,
+                      fontWeight: 600,
+                      color: '#fff',
+                      background: '#1db954',
+                      borderRadius: 6,
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    ✓ Added
+                  </span>
+                  <button
+                    onClick={() => handleSelectTrack(track)}
+                    title="Add this song to the queue again"
+                    style={{
+                      padding: '4px 8px',
+                      fontSize: 11,
+                      fontWeight: 500,
+                      color: 'var(--text-secondary)',
+                      background: 'rgba(255,255,255,0.08)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 6,
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    Add again
+                  </button>
+                </div>
+              ) : (
+                <button
+                  className="btn btn-primary"
+                  onClick={() => handleSelectTrack(track)}
+                  style={{ padding: '4px 10px', fontSize: 11 }}
+                >
+                  + Add
+                </button>
+              )}
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
