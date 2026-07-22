@@ -8,7 +8,6 @@ import { useSaavn } from '../hooks/useSaavn';
 import Player from './Player';
 import Queue from './Queue';
 import MembersPanel from './MembersPanel';
-import Upload from './Upload';
 import PlatformConnect from './PlatformConnect';
 
 function Room({ socket, roomState, setRoomState, username, onLeave }) {
@@ -659,11 +658,11 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
           youtube={youtube}
           audius={audius}
           saavn={saavn}
+          roomId={roomState.id}
+          userId={socket?.id}
           onTrackSelected={handlePlatformTrackSelected}
           canControl={canControl}
         />
-
-        <Upload roomId={roomState.id} userId={socket?.id} />
 
         <h3 style={{ marginBottom: 16, fontSize: 16 }}>Queue</h3>
         <Queue
