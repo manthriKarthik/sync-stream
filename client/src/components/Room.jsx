@@ -865,7 +865,7 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
       )}
       {/* Header */}
       <div className="room-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div className="room-header-left">
           <div className="brand brand-inline">
             <span className="brand-mark" aria-hidden="true">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="#0a0a0a">
@@ -877,10 +877,19 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
             </span>
             <span className="brand-name">EchoFy</span>
           </div>
-          <h2>{roomState.name}</h2>
-          <span className="room-code" onClick={copyRoomCode} title="Click to copy">
-            📋 {roomState.id}
-          </span>
+          <span className="header-divider" aria-hidden="true" />
+          <div className="room-title-group">
+            <span className="room-title-label">Listening Room</span>
+            <div className="room-title-row">
+              <h2>{roomState.name}</h2>
+              <span className="room-code" onClick={copyRoomCode} title="Click to copy">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <path d="M16 1H4a2 2 0 0 0-2 2v14h2V3h12V1zm3 4H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zm0 16H8V7h11v14z" />
+                </svg>
+                {roomState.id}
+              </span>
+            </div>
+          </div>
         </div>
         <div className="room-meta">
           <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
