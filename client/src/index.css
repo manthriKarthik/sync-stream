@@ -247,6 +247,29 @@ input {
   display: block;
 }
 
+/* Compact brand lockup used in the room header */
+.brand-inline {
+  margin-bottom: 0;
+  gap: 8px;
+}
+
+.brand-inline .brand-mark {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  box-shadow: 0 4px 14px rgba(255, 255, 255, 0.18);
+}
+
+.brand-name {
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.3px;
+  background: linear-gradient(90deg, #ffffff, #b5b5b5);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
 .landing-card p {
   color: var(--text-secondary);
   margin-bottom: 32px;
@@ -318,19 +341,19 @@ input {
 }
 
 .room-header .room-code {
-  background: rgba(124, 58, 237, 0.12);
+  background: rgba(255, 255, 255, 0.08);
   padding: 5px 14px;
   border-radius: 999px;
   font-size: 13px;
-  color: var(--accent-2);
+  color: var(--text-secondary);
   font-weight: 600;
   cursor: pointer;
-  border: 1px solid rgba(124, 58, 237, 0.25);
+  border: 1px solid var(--border);
   transition: background 0.2s, transform 0.15s;
 }
 
 .room-header .room-code:hover {
-  background: rgba(124, 58, 237, 0.22);
+  background: rgba(255, 255, 255, 0.16);
   transform: translateY(-1px);
 }
 

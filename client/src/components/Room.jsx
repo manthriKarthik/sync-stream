@@ -830,6 +830,17 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
       {/* Header */}
       <div className="room-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div className="brand brand-inline">
+            <span className="brand-mark" aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="#0a0a0a">
+                <rect x="2" y="9" width="3" height="6" rx="1.5" />
+                <rect x="7" y="5.5" width="3" height="13" rx="1.5" />
+                <rect x="12" y="2" width="3" height="20" rx="1.5" />
+                <rect x="17" y="7" width="3" height="10" rx="1.5" />
+              </svg>
+            </span>
+            <span className="brand-name">EchoFy</span>
+          </div>
           <h2>{roomState.name}</h2>
           <span className="room-code" onClick={copyRoomCode} title="Click to copy">
             📋 {roomState.id}
@@ -860,14 +871,18 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
           queueEmpty={queue.length === 0}
         />
 
-        <h3 style={{ marginBottom: 16, fontSize: 16 }}>Queue</h3>
-        <Queue
-          queue={queue}
-          currentIndex={currentTrackIndex}
-          onSelect={handleTrackSelect}
-          onRemove={handleRemoveTrack}
-          canControl={canControl}
-        />
+        {queue.length > 0 && (
+          <>
+            <h3 style={{ marginBottom: 16, fontSize: 16 }}>Queue</h3>
+            <Queue
+              queue={queue}
+              currentIndex={currentTrackIndex}
+              onSelect={handleTrackSelect}
+              onRemove={handleRemoveTrack}
+              canControl={canControl}
+            />
+          </>
+        )}
       </div>
 
       {/* Sliding Members & Chat Panel */}
