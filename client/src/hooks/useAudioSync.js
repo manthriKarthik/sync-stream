@@ -321,6 +321,26 @@ export function useAudioSync(socket, onEnded) {
     setIsPlaying(false);
   }, []);
 
+  // Fully stop and unload the shared element (used when the queue empties or the
+  // active track is removed) so the player bar doesn't keep showing a moving
+  // progress bar for a source that's no longer in the queue.
+  const stop = useCallback(() => {
+    const a = audioRef.current;
+    if (hlsRef.current) {
+      try { hlsRef.current.destroy(); } catch (_) { /* ignore */ }
+      hlsRef.current = null;
+    }
+    if (a) {
+      try { a.pause(); } catch (_) { /* ignore */ }
+      try { a.removeAttribute('src'); a.load(); } catch (_) { /* ignore */ }
+    }
+    lastHardSeekRef.current = 0;
+    setIsPlaying(false);
+    setCurrentTime(0);
+    setDuration(0);
+    setCurrentTrackUrl(null);
+  }, []);
+
   const seek = useCallback((time) => {
     audioRef.current.currentTime = time;
     setCurrentTime(time);
@@ -353,6 +373,7 @@ export function useAudioSync(socket, onEnded) {
     seek,
     setVolume,
     setSharedActive,
+    stop,
     getSyncedNow
   };
 }

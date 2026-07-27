@@ -45,6 +45,7 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
     seek,
     setVolume,
     setSharedActive,
+    stop,
     clockOffset
   } = useAudioSync(socket, handleTrackEnded);
 
@@ -458,6 +459,20 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
   // YouTube/Spotify tracks report progress via their own players, not the shared <audio>
   const activeTrack = queue[currentTrackIndex] || null;
   const isPlatformTrack = activeTrack?.platform === 'youtube' || activeTrack?.platform === 'spotify';
+
+  // When there is no active track (empty queue or the playing song was removed),
+  // fully stop the shared audio and any platform player so the player bar does
+  // not keep showing a moving progress bar with "No track loaded".
+  useEffect(() => {
+    if (!activeTrack) {
+      try { stop(); } catch (_) { /* ignore */ }
+      try { youtube.pause(); } catch (_) { /* ignore */ }
+      try { spotify.pause(); } catch (_) { /* ignore */ }
+      setPlatformPlaying(false);
+      setPlatformProgress({ time: 0, duration: 0 });
+      lastLoadedUrlRef.current = null;
+    }
+  }, [activeTrack, stop]);
 
   const handlePlay = () => {
     if (!canControl) return;
@@ -897,10 +912,10 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
 
       {/* Player bar */}
       <Player
-        isPlaying={isPlatformTrack ? platformPlaying : isPlaying}
-        currentTime={isPlatformTrack ? platformProgress.time : currentTime}
-        duration={isPlatformTrack ? platformProgress.duration : duration}
-        currentTrack={queue[currentTrackIndex] || null}
+        isPlaying={!activeTrack ? false : (isPlatformTrack ? platformPlaying : isPlaying)}
+        currentTime={!activeTrack ? 0 : (isPlatformTrack ? platformProgress.time : currentTime)}
+        duration={!activeTrack ? 0 : (isPlatformTrack ? platformProgress.duration : duration)}
+        currentTrack={activeTrack}
         onPlay={handlePlay}
         onPause={handlePause}
         onSeek={handleSeek}
