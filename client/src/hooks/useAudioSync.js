@@ -277,12 +277,17 @@ export function useAudioSync(socket, onEnded) {
       hls.attachMedia(audio);
     } else {
       // Native HLS (Safari/iOS) or a plain MP3/MP4 progressive stream.
-      // NOTE: do NOT call audio.load() right before an in-gesture play().
-      // An explicit load() aborts the pending play with
-      // "The play() request was interrupted by a call to load()", which
-      // rejects the play — leaving the timer advancing (via sync) with NO
-      // audio. Assigning .src already triggers the load implicitly.
+      // Assign the new source and explicitly call load(). On Android Chrome,
+      // when the shared <audio> element is reused after a previous load ended
+      // in an error state (networkState=NO_SOURCE), just setting .src does NOT
+      // reliably kick off a fresh fetch — the element stays stuck and play()
+      // produces no sound while the sync clock keeps advancing the timer.
+      // load() forces a clean resource-selection pass. It is safe here because
+      // loadTrack runs at most once per track change (guarded by
+      // lastLoadedUrlRef) and play() is always called AFTER this, so it never
+      // interrupts a pending play().
       audio.src = url;
+      audio.load();
     }
     setCurrentTrackUrl(url);
     setCurrentTime(0);
