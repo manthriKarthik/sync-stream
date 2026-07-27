@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react';
+import Visualizer from './Visualizer';
 
 function Player({ isPlaying, currentTime, duration, currentTrack, onPlay, onPause, onSeek, onNext, onPrev, onVolumeChange, canControl }) {
   const [volume, setVolume] = useState(1);
@@ -28,6 +29,8 @@ function Player({ isPlaying, currentTime, duration, currentTrack, onPlay, onPaus
 
   return (
     <div className={`player-bar ${isPlaying && currentTrack ? 'is-live' : ''}`}>
+      {/* Decorative-only spectrum strip (no audio tapping) */}
+      <Visualizer active={isPlaying && !!currentTrack} />
       {/* Left: track info */}
       <div className="player-track-info">
         <div className={`player-art-wrap ${isPlaying && currentTrack ? 'is-playing' : ''}`}>
