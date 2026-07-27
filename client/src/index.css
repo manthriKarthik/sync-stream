@@ -520,9 +520,9 @@ input {
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
-  filter: blur(55px) saturate(1.4) brightness(0.85);
-  opacity: 0.4;
-  transform: scale(1.15);
+  filter: blur(32px) saturate(1.45) brightness(0.95);
+  opacity: 0.6;
+  transform: scale(1.12);
   pointer-events: none;
   animation: bgArtIn 1.2s ease;
 }
@@ -532,13 +532,13 @@ input {
   content: '';
   position: absolute;
   inset: 0;
-  background: radial-gradient(circle at 50% 35%, transparent, rgba(0, 0, 0, 0.5) 92%),
-    linear-gradient(180deg, rgba(0, 0, 0, 0.25), rgba(0, 0, 0, 0.62));
+  background: radial-gradient(circle at 50% 35%, transparent, rgba(0, 0, 0, 0.4) 95%),
+    linear-gradient(180deg, rgba(0, 0, 0, 0.2), rgba(0, 0, 0, 0.55));
 }
 
 @keyframes bgArtIn {
-  from { opacity: 0; transform: scale(1.25); }
-  to { opacity: 0.4; transform: scale(1.15); }
+  from { opacity: 0; transform: scale(1.22); }
+  to { opacity: 0.6; transform: scale(1.12); }
 }
 
 /* Keep room content above the ambient art */
