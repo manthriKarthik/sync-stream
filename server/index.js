@@ -7,6 +7,7 @@ import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
+import { Readable } from 'stream';
 import { fileURLToPath } from 'url';
 import 'dotenv/config';
 import { YouTube } from 'youtube-sr';
@@ -359,6 +360,11 @@ function mapSaavnSong(song) {
   // Use the largest artwork available.
   const image = (song.image || '').replace('150x150', '500x500').replace('50x50', '500x500');
 
+  // saavncdn.com aborts cross-origin <audio> media requests (hotlink
+  // protection) even though a plain fetch works, so the browser can't play the
+  // raw URL directly. Route it through our own /api/saavn/stream proxy instead.
+  const streamUrl = url ? `/api/saavn/stream?u=${encodeURIComponent(url)}` : null;
+
   return {
     id: song.id,
     uri: song.id,
@@ -366,7 +372,7 @@ function mapSaavnSong(song) {
     artist: artist || 'Unknown',
     album: decodeEntities(info.album || song.album || ''),
     albumArt: image,
-    url, // decrypted direct stream → shared <audio>, full sync + background
+    url: streamUrl, // proxied stream → shared <audio>, full sync + background
     duration: durationSec * 1000,
     durationText: `${mins}:${secs.toString().padStart(2, '0')}`,
     platform: 'saavn'
@@ -391,6 +397,39 @@ app.get('/api/saavn/search', async (req, res) => {
   } catch (err) {
     console.error('Saavn search error:', err.message);
     res.json({ results: [] });
+  }
+});
+
+// Proxy JioSaavn CDN audio. saavncdn.com aborts cross-origin <audio> media
+// requests (hotlink protection) even though a plain fetch works, so the browser
+// cannot play the raw stream. We fetch it server-side (which works) and stream
+// it back from our own origin with proper HTTP Range support so seeking works.
+app.get('/api/saavn/stream', async (req, res) => {
+  const target = req.query.u;
+  if (!target) return res.status(400).end('missing url');
+  let host;
+  try { host = new URL(target).hostname; } catch { return res.status(400).end('bad url'); }
+  // Only allow proxying JioSaavn's own CDN (prevents open-proxy / SSRF abuse).
+  if (!/(^|\.)saavncdn\.com$/i.test(host)) return res.status(403).end('forbidden host');
+  try {
+    const range = req.headers.range;
+    const upstream = await fetch(target, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0',
+        ...(range ? { Range: range } : {})
+      }
+    });
+    res.status(upstream.status);
+    for (const h of ['content-type', 'content-length', 'content-range', 'accept-ranges', 'cache-control']) {
+      const v = upstream.headers.get(h);
+      if (v) res.setHeader(h, v);
+    }
+    if (!upstream.headers.get('accept-ranges')) res.setHeader('Accept-Ranges', 'bytes');
+    if (!upstream.body) return res.end();
+    Readable.fromWeb(upstream.body).pipe(res);
+  } catch (err) {
+    console.error('Saavn stream proxy error:', err.message);
+    if (!res.headersSent) res.status(502).end('proxy error');
   }
 });
 
