@@ -598,6 +598,57 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
     navigator.clipboard.writeText(roomState.id);
   };
 
+  // Media Session API: register the current track with the OS so lock-screen /
+  // notification media controls appear AND background/locked playback keeps its
+  // audio alive. Without a registered media session, mobile browsers throttle or
+  // silence a backgrounded <audio> element — the classic "playing but no sound
+  // when the phone is locked" bug.
+  useEffect(() => {
+    if (!('mediaSession' in navigator)) return;
+    if (!activeTrack) {
+      try { navigator.mediaSession.metadata = null; } catch (_) { /* ignore */ }
+      try { navigator.mediaSession.playbackState = 'none'; } catch (_) { /* ignore */ }
+      return;
+    }
+    try {
+      navigator.mediaSession.metadata = new window.MediaMetadata({
+        title: activeTrack.name || 'Unknown track',
+        artist: activeTrack.artist || '',
+        album: activeTrack.album || 'EchoFy',
+        artwork: activeTrack.albumArt
+          ? [
+              { src: activeTrack.albumArt, sizes: '96x96', type: 'image/jpeg' },
+              { src: activeTrack.albumArt, sizes: '256x256', type: 'image/jpeg' },
+              { src: activeTrack.albumArt, sizes: '512x512', type: 'image/jpeg' }
+            ]
+          : []
+      });
+    } catch (_) { /* ignore */ }
+  }, [activeTrack]);
+
+  // Reflect play/pause state to the OS and wire lock-screen buttons to the same
+  // synced controls the on-screen player uses.
+  useEffect(() => {
+    if (!('mediaSession' in navigator)) return;
+    const nowPlaying = !activeTrack ? false : (isPlatformTrack ? platformPlaying : isPlaying);
+    try {
+      navigator.mediaSession.playbackState = nowPlaying ? 'playing' : 'paused';
+    } catch (_) { /* ignore */ }
+    const setHandler = (action, fn) => {
+      try { navigator.mediaSession.setActionHandler(action, fn); } catch (_) { /* ignore */ }
+    };
+    setHandler('play', () => handlePlay());
+    setHandler('pause', () => handlePause());
+    setHandler('previoustrack', () => handlePrev());
+    setHandler('nexttrack', () => handleNext());
+    return () => {
+      setHandler('play', null);
+      setHandler('pause', null);
+      setHandler('previoustrack', null);
+      setHandler('nexttrack', null);
+    };
+  }, [activeTrack, isPlatformTrack, platformPlaying, isPlaying, currentTrackIndex, queue, canControl]);
+
   // Enable audio on mobile - must run from a user gesture to satisfy autoplay policies
   const handleEnableAudio = () => {
     // Unlock the local <audio> element

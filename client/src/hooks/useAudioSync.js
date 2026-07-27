@@ -319,6 +319,33 @@ export function useAudioSync(socket, onEnded) {
     }
   }, []);
 
+  // Keep the bass-boost Web Audio graph alive across screen lock / backgrounding.
+  // Mobile OSes suspend the AudioContext when the screen locks, which makes
+  // playback SILENT even though the <audio> element's timer keeps advancing
+  // (the sync clock keeps ticking). Resume the context whenever the page regains
+  // focus and whenever playback (re)starts, so sound returns immediately.
+  useEffect(() => {
+    const audio = audioRef.current;
+    const resumeCtx = () => {
+      const ctx = audioCtxRef.current;
+      if (ctx && ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+      }
+    };
+    document.addEventListener('visibilitychange', resumeCtx);
+    window.addEventListener('focus', resumeCtx);
+    window.addEventListener('pageshow', resumeCtx);
+    audio.addEventListener('play', resumeCtx);
+    audio.addEventListener('playing', resumeCtx);
+    return () => {
+      document.removeEventListener('visibilitychange', resumeCtx);
+      window.removeEventListener('focus', resumeCtx);
+      window.removeEventListener('pageshow', resumeCtx);
+      audio.removeEventListener('play', resumeCtx);
+      audio.removeEventListener('playing', resumeCtx);
+    };
+  }, []);
+
   const play = useCallback(() => {
     audioRef.current.play().catch(console.error);
     setIsPlaying(true);
