@@ -94,6 +94,10 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
 
   // Handle adding a streaming platform track to the queue
   const handlePlatformTrackSelected = (track) => {
+    // Was the queue empty before this add? If so, this is the "first song" —
+    // start playing it immediately (inside the tap gesture, so mobile browsers
+    // allow sound). Every later song just gets added to the queue.
+    const isFirstSong = queue.length === 0;
     // Add the platform track to the room queue via socket
     socket.emit('queue:add-platform-track', {
       roomId: roomState.id,
@@ -110,6 +114,18 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
         addedBy: username
       }
     });
+
+    if (isFirstSong && canControl) {
+      // Play this first track right away within the user gesture and tell the
+      // server/other devices to start it in sync at index 0.
+      spotify.activate();
+      startTrackInGesture(track);
+      socket.emit('playback:play', {
+        roomId: roomState.id,
+        trackIndex: 0,
+        position: 0
+      });
+    }
   };
 
   // Listen for room updates
@@ -841,6 +857,7 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
           userId={socket?.id}
           onTrackSelected={handlePlatformTrackSelected}
           canControl={canControl}
+          queueEmpty={queue.length === 0}
         />
 
         <h3 style={{ marginBottom: 16, fontSize: 16 }}>Queue</h3>

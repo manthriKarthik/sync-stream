@@ -55,8 +55,11 @@ function Player({ isPlaying, currentTime, duration, currentTrack, onPlay, onPaus
             onClick={onPrev}
             disabled={!canControl}
             title="Previous"
+            aria-label="Previous"
           >
-            ⏮
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">
+              <path d="M7 6h2v12H7zm2.5 6l9 6V6z" />
+            </svg>
           </button>
 
           <button
@@ -64,8 +67,17 @@ function Player({ isPlaying, currentTime, duration, currentTrack, onPlay, onPaus
             onClick={isPlaying ? onPause : onPlay}
             disabled={!canControl || !currentTrack}
             title={isPlaying ? 'Pause' : 'Play'}
+            aria-label={isPlaying ? 'Pause' : 'Play'}
           >
-            {isPlaying ? '⏸' : '▶'}
+            {isPlaying ? (
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true">
+                <path d="M6 5h4v14H6zm8 0h4v14h-4z" />
+              </svg>
+            ) : (
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true">
+                <path d="M8 5v14l11-7z" />
+              </svg>
+            )}
           </button>
 
           <button
@@ -73,8 +85,11 @@ function Player({ isPlaying, currentTime, duration, currentTrack, onPlay, onPaus
             onClick={onNext}
             disabled={!canControl}
             title="Next"
+            aria-label="Next"
           >
-            ⏭
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">
+              <path d="M15 6h2v12h-2zM5.5 6l9 6-9 6z" />
+            </svg>
           </button>
         </div>
 

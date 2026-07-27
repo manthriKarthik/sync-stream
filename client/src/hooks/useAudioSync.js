@@ -233,8 +233,18 @@ export function useAudioSync(socket, onEnded) {
   useEffect(() => {
     const audio = audioRef.current;
 
+    // Throttle progress-bar state updates. Calling setCurrentTime on every
+    // animation frame (~60fps) re-renders the whole Room/Player tree 60x/sec,
+    // which causes severe lag on mobile. The progress bar only needs a few
+    // updates per second; drift/sync logic reads audio.currentTime directly,
+    // so throttling the React state has no effect on sync accuracy.
+    let lastUpdate = 0;
     const updateTime = () => {
-      setCurrentTime(audio.currentTime);
+      const now = performance.now();
+      if (now - lastUpdate >= 250) {
+        lastUpdate = now;
+        setCurrentTime(audio.currentTime);
+      }
       animFrameRef.current = requestAnimationFrame(updateTime);
     };
 

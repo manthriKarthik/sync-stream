@@ -450,7 +450,7 @@ input {
   align-items: center;
   justify-content: center;
   transition: transform 0.15s ease, box-shadow 0.2s ease;
-  box-shadow: 0 6px 20px rgba(124, 58, 237, 0.45);
+  box-shadow: 0 6px 20px rgba(255, 255, 255, 0.25);
 }
 
 .player-controls .play-btn:hover {

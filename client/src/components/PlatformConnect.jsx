@@ -11,7 +11,7 @@ const TABS = [
   { id: 'upload', label: 'Upload' }
 ];
 
-function PlatformConnect({ spotify, youtube, audius, saavn, soundcloud, roomId, userId, onTrackSelected, canControl }) {
+function PlatformConnect({ spotify, youtube, audius, saavn, soundcloud, roomId, userId, onTrackSelected, canControl, queueEmpty }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [addedIds, setAddedIds] = useState(() => new Set());
@@ -412,7 +412,7 @@ function PlatformConnect({ spotify, youtube, audius, saavn, soundcloud, roomId, 
                   onClick={() => handleSelectTrack(track)}
                   style={{ padding: '4px 10px', fontSize: 11 }}
                 >
-                  + Add
+                  {queueEmpty ? '▶ Play' : '+ Add'}
                 </button>
               )}
             </div>
