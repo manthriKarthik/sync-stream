@@ -30,11 +30,18 @@ function Player({ isPlaying, currentTime, duration, currentTrack, onPlay, onPaus
     <div className="player-bar">
       {/* Left: track info */}
       <div className="player-track-info">
-        {currentTrack?.albumArt ? (
-          <img src={currentTrack.albumArt} alt="" className="player-art" />
-        ) : (
-          <div className="player-art player-art-placeholder">🎵</div>
-        )}
+        <div className={`player-art-wrap ${isPlaying && currentTrack ? 'is-playing' : ''}`}>
+          {currentTrack?.albumArt ? (
+            <img src={currentTrack.albumArt} alt="" className="player-art" />
+          ) : (
+            <div className="player-art player-art-placeholder">🎵</div>
+          )}
+          {isPlaying && currentTrack && (
+            <span className="now-playing-eq" aria-hidden="true">
+              <i /><i /><i /><i />
+            </span>
+          )}
+        </div>
         <div className="player-track-text">
           <div className="track-name">
             {currentTrack ? currentTrack.name : 'No track loaded'}

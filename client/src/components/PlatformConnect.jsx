@@ -146,7 +146,9 @@ function PlatformConnect({ spotify, youtube, audius, saavn, soundcloud, roomId, 
 
   return (
     <div style={{
-      background: 'var(--bg-secondary)',
+      background: 'rgba(14, 14, 20, 0.72)',
+      backdropFilter: 'blur(22px)',
+      WebkitBackdropFilter: 'blur(22px)',
       border: '1px solid var(--border)',
       borderRadius: 'var(--radius)',
       padding: 20,

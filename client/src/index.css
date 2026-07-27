@@ -88,6 +88,9 @@ body::after {
   .landing::before,
   .landing-card h1,
   .brand-mark::before { animation: none; }
+  .room-bg-art,
+  .player-art-wrap.is-playing,
+  .now-playing-eq i { animation: none; }
 }
 
 /* Scrollbars */
@@ -524,7 +527,7 @@ input {
   opacity: 0.6;
   transform: scale(1.12);
   pointer-events: none;
-  animation: bgArtIn 1.2s ease;
+  animation: bgArtIn 1.2s ease, bgArtDrift 34s ease-in-out infinite alternate;
 }
 
 /* Dark veil so text stays readable over the art */
@@ -537,8 +540,14 @@ input {
 }
 
 @keyframes bgArtIn {
-  from { opacity: 0; transform: scale(1.22); }
-  to { opacity: 0.6; transform: scale(1.12); }
+  from { opacity: 0; }
+  to { opacity: 0.6; }
+}
+
+/* Slow Ken Burns drift so the backdrop feels alive */
+@keyframes bgArtDrift {
+  0% { transform: scale(1.12) translate3d(0, 0, 0); }
+  100% { transform: scale(1.24) translate3d(-3%, -2.5%, 0); }
 }
 
 /* Keep room content above the ambient art */
@@ -703,6 +712,57 @@ input {
   object-fit: cover;
   flex-shrink: 0;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.06) inset;
+}
+
+/* Album-art wrapper with a live “now playing” equalizer overlay */
+.player-art-wrap {
+  position: relative;
+  flex-shrink: 0;
+  border-radius: 12px;
+  transition: box-shadow 0.3s ease;
+}
+
+.player-art-wrap.is-playing {
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.25), 0 8px 26px rgba(120, 170, 255, 0.35);
+  animation: artPulse 2.4s ease-in-out infinite;
+}
+
+@keyframes artPulse {
+  0%, 100% { box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.22), 0 8px 24px rgba(120, 170, 255, 0.3); }
+  50% { box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.35), 0 10px 34px rgba(160, 120, 255, 0.5); }
+}
+
+.now-playing-eq {
+  position: absolute;
+  left: 6px;
+  bottom: 6px;
+  display: flex;
+  align-items: flex-end;
+  gap: 2.5px;
+  height: 16px;
+  padding: 3px 4px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+}
+
+.now-playing-eq i {
+  width: 3px;
+  height: 100%;
+  border-radius: 2px;
+  background: linear-gradient(180deg, #a78bfa, #38bdf8);
+  transform-origin: center bottom;
+  animation: eqPlay 0.9s ease-in-out infinite;
+}
+
+.now-playing-eq i:nth-child(1) { animation-delay: 0s; }
+.now-playing-eq i:nth-child(2) { animation-delay: 0.18s; }
+.now-playing-eq i:nth-child(3) { animation-delay: 0.36s; }
+.now-playing-eq i:nth-child(4) { animation-delay: 0.12s; }
+
+@keyframes eqPlay {
+  0%, 100% { transform: scaleY(0.35); }
+  50% { transform: scaleY(1); }
 }
 
 .player-art-placeholder {
