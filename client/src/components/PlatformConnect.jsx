@@ -344,12 +344,14 @@ function PlatformConnect({ spotify, youtube, audius, saavn, soundcloud, roomId, 
             return (
             <div
               key={track.id}
+              onClick={() => handleSelectTrack(track)}
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 gap: 12,
                 padding: '8px 10px',
                 borderRadius: 8,
+                cursor: 'pointer',
                 transition: 'background 0.2s'
               }}
               onMouseOver={(e) => e.currentTarget.style.background = 'var(--bg-tertiary)'}
@@ -389,7 +391,7 @@ function PlatformConnect({ spotify, youtube, audius, saavn, soundcloud, roomId, 
                     ✓ Added
                   </span>
                   <button
-                    onClick={() => handleSelectTrack(track)}
+                    onClick={(e) => { e.stopPropagation(); handleSelectTrack(track); }}
                     title="Add this song to the queue again"
                     style={{
                       padding: '4px 8px',
@@ -409,7 +411,7 @@ function PlatformConnect({ spotify, youtube, audius, saavn, soundcloud, roomId, 
               ) : (
                 <button
                   className="btn btn-primary"
-                  onClick={() => handleSelectTrack(track)}
+                  onClick={(e) => { e.stopPropagation(); handleSelectTrack(track); }}
                   style={{ padding: '4px 10px', fontSize: 11 }}
                 >
                   {queueEmpty ? '▶ Play' : '+ Add'}
