@@ -759,6 +759,11 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
           aria-hidden="true"
         />
       )}
+      {/* Floating music notes — gentle ambient particles drifting upward */}
+      <div className="room-notes" aria-hidden="true">
+        <span>♪</span><span>♫</span><span>♩</span><span>♬</span>
+        <span>♪</span><span>♫</span><span>♩</span><span>♬</span>
+      </div>
       {!audioEnabled && (
         <div
           onClick={handleEnableAudio}

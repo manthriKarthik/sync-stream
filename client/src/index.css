@@ -719,6 +719,7 @@ input {
   position: relative;
   flex-shrink: 0;
   border-radius: 12px;
+  isolation: isolate;
   transition: box-shadow 0.3s ease;
 }
 
@@ -1386,4 +1387,242 @@ input {
   .landing-card {
     padding: 32px 24px;
   }
+}
+
+/* ============================================================
+   EXTRA MOTION — floating notes, live player, staggered entrances
+   ============================================================ */
+
+/* Floating music notes drifting up through the room */
+.room-notes {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.room-notes span {
+  position: absolute;
+  bottom: -8%;
+  font-size: 22px;
+  color: rgba(255, 255, 255, 0.13);
+  text-shadow: 0 0 18px rgba(167, 139, 250, 0.5);
+  animation: noteFloat linear infinite;
+  will-change: transform, opacity;
+}
+
+.room-notes span:nth-child(1) { left: 8%;  font-size: 20px; animation-duration: 15s; animation-delay: 0s;   }
+.room-notes span:nth-child(2) { left: 22%; font-size: 28px; animation-duration: 19s; animation-delay: 3s;   color: rgba(56, 189, 248, 0.14); }
+.room-notes span:nth-child(3) { left: 37%; font-size: 16px; animation-duration: 13s; animation-delay: 6s;   }
+.room-notes span:nth-child(4) { left: 51%; font-size: 26px; animation-duration: 21s; animation-delay: 1.5s; color: rgba(236, 72, 153, 0.14); }
+.room-notes span:nth-child(5) { left: 64%; font-size: 18px; animation-duration: 16s; animation-delay: 8s;   }
+.room-notes span:nth-child(6) { left: 76%; font-size: 30px; animation-duration: 23s; animation-delay: 4s;   color: rgba(45, 212, 191, 0.14); }
+.room-notes span:nth-child(7) { left: 87%; font-size: 20px; animation-duration: 17s; animation-delay: 10s;  }
+.room-notes span:nth-child(8) { left: 94%; font-size: 24px; animation-duration: 20s; animation-delay: 2s;   color: rgba(167, 139, 250, 0.14); }
+
+@keyframes noteFloat {
+  0%   { transform: translateY(0) translateX(0) rotate(0deg); opacity: 0; }
+  10%  { opacity: 1; }
+  50%  { transform: translateY(-55vh) translateX(24px) rotate(200deg); }
+  90%  { opacity: 1; }
+  100% { transform: translateY(-108vh) translateX(-18px) rotate(360deg); opacity: 0; }
+}
+
+/* Staggered fade-in for queue rows */
+.queue-item {
+  animation: rowIn 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.queue-item:nth-child(1) { animation-delay: 0.02s; }
+.queue-item:nth-child(2) { animation-delay: 0.06s; }
+.queue-item:nth-child(3) { animation-delay: 0.10s; }
+.queue-item:nth-child(4) { animation-delay: 0.14s; }
+.queue-item:nth-child(5) { animation-delay: 0.18s; }
+.queue-item:nth-child(6) { animation-delay: 0.22s; }
+.queue-item:nth-child(7) { animation-delay: 0.26s; }
+.queue-item:nth-child(8) { animation-delay: 0.30s; }
+
+@keyframes rowIn {
+  from { opacity: 0; transform: translateX(-14px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* Glowing accent bar that slides in on the active queue row */
+.queue-item.active {
+  position: relative;
+  overflow: hidden;
+}
+.queue-item.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: linear-gradient(180deg, #a78bfa, #38bdf8, #ec4899);
+  box-shadow: 0 0 12px rgba(167, 139, 250, 0.8);
+  animation: barGrow 0.4s ease both;
+}
+@keyframes barGrow {
+  from { transform: scaleY(0); }
+  to   { transform: scaleY(1); }
+}
+
+/* Feature pills cascade in on the landing card */
+.feature-pill {
+  animation: pillIn 0.5s ease both;
+}
+.feature-pill:nth-child(1) { animation-delay: 0.15s; }
+.feature-pill:nth-child(2) { animation-delay: 0.23s; }
+.feature-pill:nth-child(3) { animation-delay: 0.31s; }
+.feature-pill:nth-child(4) { animation-delay: 0.39s; }
+.feature-pill:nth-child(5) { animation-delay: 0.47s; }
+@keyframes pillIn {
+  from { opacity: 0; transform: translateY(10px) scale(0.9); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Player bar comes alive with a moving light along its top edge while playing */
+.player-bar {
+  position: sticky;
+  overflow: hidden;
+}
+.player-bar.is-live::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 2px;
+  width: 100%;
+  background: linear-gradient(90deg, transparent, #a78bfa, #38bdf8, #ec4899, transparent);
+  background-size: 50% 100%;
+  animation: railSweep 3s linear infinite;
+}
+@keyframes railSweep {
+  from { background-position: -50% 0; }
+  to   { background-position: 150% 0; }
+}
+
+/* Spinning conic halo behind the album art while a track plays (vinyl vibe) */
+.player-art-wrap.is-playing::before {
+  content: '';
+  position: absolute;
+  inset: -5px;
+  border-radius: 16px;
+  background: conic-gradient(from 0deg, #a78bfa, #38bdf8, #ec4899, #2dd4bf, #a78bfa);
+  filter: blur(7px);
+  opacity: 0.55;
+  z-index: -1;
+  animation: vinylSpin 4s linear infinite;
+}
+@keyframes vinylSpin {
+  to { transform: rotate(360deg); }
+}
+
+/* Now-playing title gets a subtle sweeping shimmer while live */
+.player-track-info .track-name.is-live {
+  background: linear-gradient(100deg, #f5f5f7 30%, #a78bfa 50%, #f5f5f7 70%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: textShimmer 4s linear infinite;
+}
+
+/* Play button breathes and radiates rings while playing */
+.play-btn.playing {
+  animation: playBreathe 2.2s ease-in-out infinite;
+}
+.play-btn.playing::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.5);
+  animation: playRing 2s ease-out infinite;
+}
+.player-controls .play-btn {
+  position: relative;
+}
+@keyframes playBreathe {
+  0%, 100% { box-shadow: 0 6px 20px rgba(255, 255, 255, 0.25); }
+  50%      { box-shadow: 0 8px 30px rgba(167, 139, 250, 0.55); }
+}
+@keyframes playRing {
+  0%   { transform: scale(1);   opacity: 0.6; }
+  100% { transform: scale(1.7); opacity: 0; }
+}
+
+/* Moving sheen inside the progress fill while playing */
+.progress-fill.playing::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.7), transparent);
+  background-size: 40% 100%;
+  animation: fillShine 1.8s linear infinite;
+}
+@keyframes fillShine {
+  from { background-position: -40% 0; }
+  to   { background-position: 140% 0; }
+}
+
+/* Platform tab logo gives a playful bounce on hover */
+.platform-tab:hover .platform-tab-logo {
+  animation: iconPop 0.45s ease;
+}
+@keyframes iconPop {
+  0%   { transform: scale(1) rotate(0); }
+  40%  { transform: scale(1.28) rotate(-8deg); }
+  70%  { transform: scale(0.95) rotate(5deg); }
+  100% { transform: scale(1) rotate(0); }
+}
+
+/* Host member avatar wears a soft pulsing ring; all avatars pop on hover */
+.member-item:hover .member-avatar {
+  transform: scale(1.12) translateY(-1px);
+}
+.member-avatar {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.member-item:first-child .member-avatar {
+  animation: hostRing 2.6s ease-in-out infinite;
+}
+@keyframes hostRing {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.35); }
+  50%      { box-shadow: 0 0 0 5px rgba(167, 139, 250, 0.08), 0 0 14px rgba(167, 139, 250, 0.45); }
+}
+
+/* Volume slider thumb glows when you grab it */
+.volume-slider:hover {
+  filter: drop-shadow(0 0 6px rgba(167, 139, 250, 0.7));
+}
+
+/* Icon buttons rotate-nudge on hover for a tactile feel */
+.player-controls .btn-icon:hover:not(:disabled) {
+  transform: translateY(-1px) scale(1.08);
+}
+
+/* Room header brand mark keeps its equalizer alive; add a gentle title fade-in */
+.room-title-group {
+  animation: rowIn 0.6s ease both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .room-notes span,
+  .queue-item,
+  .queue-item.active::before,
+  .feature-pill,
+  .player-bar.is-live::before,
+  .player-art-wrap.is-playing::before,
+  .player-track-info .track-name.is-live,
+  .play-btn.playing,
+  .play-btn.playing::after,
+  .progress-fill.playing::after,
+  .member-item:first-child .member-avatar,
+  .room-title-group {
+    animation: none !important;
+  }
+  .room-notes { display: none; }
 }

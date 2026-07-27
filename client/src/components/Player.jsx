@@ -27,7 +27,7 @@ function Player({ isPlaying, currentTime, duration, currentTrack, onPlay, onPaus
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   return (
-    <div className="player-bar">
+    <div className={`player-bar ${isPlaying && currentTrack ? 'is-live' : ''}`}>
       {/* Left: track info */}
       <div className="player-track-info">
         <div className={`player-art-wrap ${isPlaying && currentTrack ? 'is-playing' : ''}`}>
@@ -43,7 +43,7 @@ function Player({ isPlaying, currentTime, duration, currentTrack, onPlay, onPaus
           )}
         </div>
         <div className="player-track-text">
-          <div className="track-name">
+          <div className={`track-name ${isPlaying && currentTrack ? 'is-live' : ''}`}>
             {currentTrack ? currentTrack.name : 'No track loaded'}
           </div>
           <div className="track-artist">
@@ -70,7 +70,7 @@ function Player({ isPlaying, currentTime, duration, currentTrack, onPlay, onPaus
           </button>
 
           <button
-            className="play-btn"
+            className={`play-btn ${isPlaying ? 'playing' : ''}`}
             onClick={isPlaying ? onPause : onPlay}
             disabled={!canControl || !currentTrack}
             title={isPlaying ? 'Pause' : 'Play'}
@@ -107,7 +107,7 @@ function Player({ isPlaying, currentTime, duration, currentTrack, onPlay, onPaus
             ref={progressRef}
             onClick={handleProgressClick}
           >
-            <div className="progress-fill" style={{ width: `${progress}%` }}>
+            <div className={`progress-fill ${isPlaying ? 'playing' : ''}`} style={{ width: `${progress}%` }}>
               <span className="progress-thumb" />
             </div>
           </div>
