@@ -38,6 +38,14 @@ export function useAudioSync(socket, onEnded) {
   // the previously-loaded local song would replay on top of the platform one.
   const activeIsSharedRef = useRef(true);
 
+  // --- Bass boost (Web Audio) ---
+  // Built lazily the first time the user turns bass boost on, so users who never
+  // touch it keep the plain <audio> pipeline (zero risk to normal playback).
+  const audioCtxRef = useRef(null);
+  const mediaSrcNodeRef = useRef(null);
+  const bassNodeRef = useRef(null);
+  const [bassBoost, setBassBoostState] = useState(0); // gain in dB (0 = off)
+
   // Unlock audio playback on first user interaction (bypass autoplay policy)
   useEffect(() => {
     const audio = audioRef.current;
@@ -350,6 +358,66 @@ export function useAudioSync(socket, onEnded) {
     audioRef.current.volume = Math.max(0, Math.min(1, vol));
   }, []);
 
+  // Bass boost via a Web Audio low-shelf filter. Applies to the shared <audio>
+  // element only (Saavn / Audius / SoundCloud / uploads) — YouTube/Spotify use
+  // their own players. The Web Audio graph is created lazily on first enable;
+  // cross-origin streams need a CORS re-fetch, so we reload the current source
+  // once when the graph is first attached.
+  const setBassBoost = useCallback((dB) => {
+    const level = Math.max(0, Math.min(15, Number(dB) || 0));
+    setBassBoostState(level);
+    const audio = audioRef.current;
+
+    // First-time setup: build AudioContext -> lowshelf -> destination.
+    if (!audioCtxRef.current) {
+      if (level === 0) return; // nothing to build while turning off from off
+      try {
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        if (!Ctx) return;
+        const ctx = new Ctx();
+        const currentSrc = audio.src;
+        const resumeTime = audio.currentTime;
+        const wasPlaying = !audio.paused;
+
+        // Web Audio outputs silence for cross-origin media unless it was fetched
+        // with CORS. Re-fetch the current source as a CORS request.
+        audio.crossOrigin = 'anonymous';
+
+        const mediaSrc = ctx.createMediaElementSource(audio);
+        const bass = ctx.createBiquadFilter();
+        bass.type = 'lowshelf';
+        bass.frequency.value = 220;
+        bass.gain.value = level;
+        mediaSrc.connect(bass);
+        bass.connect(ctx.destination);
+
+        audioCtxRef.current = ctx;
+        mediaSrcNodeRef.current = mediaSrc;
+        bassNodeRef.current = bass;
+
+        if (currentSrc) {
+          audio.src = currentSrc;
+          audio.load();
+          const restore = () => {
+            try { audio.currentTime = resumeTime; } catch (_) { /* ignore */ }
+            if (wasPlaying) audio.play().catch(() => {});
+            audio.removeEventListener('loadedmetadata', restore);
+          };
+          audio.addEventListener('loadedmetadata', restore);
+        }
+      } catch (e) {
+        console.error('Bass boost init failed:', e);
+      }
+      return;
+    }
+
+    // Graph already exists: just update the gain (and resume if suspended).
+    if (bassNodeRef.current) bassNodeRef.current.gain.value = level;
+    if (audioCtxRef.current.state === 'suspended') {
+      audioCtxRef.current.resume().catch(() => {});
+    }
+  }, []);
+
   // Tell the engine whether the active track uses this shared <audio> element.
   // When set to false (a YouTube/Spotify track is active) the shared element is
   // paused and playback:sync events are ignored until it's shared again.
@@ -374,6 +442,8 @@ export function useAudioSync(socket, onEnded) {
     setVolume,
     setSharedActive,
     stop,
+    bassBoost,
+    setBassBoost,
     getSyncedNow
   };
 }

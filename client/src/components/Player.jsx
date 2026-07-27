@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 
-function Player({ isPlaying, currentTime, duration, currentTrack, onPlay, onPause, onSeek, onNext, onPrev, onVolumeChange, canControl }) {
+function Player({ isPlaying, currentTime, duration, currentTrack, onPlay, onPause, onSeek, onNext, onPrev, onVolumeChange, bassBoost, onBassBoostChange, canControl }) {
   const [volume, setVolume] = useState(1);
   const progressRef = useRef(null);
 
@@ -108,8 +108,19 @@ function Player({ isPlaying, currentTime, duration, currentTrack, onPlay, onPaus
         </div>
       </div>
 
-      {/* Right: volume */}
+      {/* Right: bass boost + volume */}
       <div className="player-extra">
+        <button
+          className={`bass-btn ${bassBoost > 0 ? 'active' : ''}`}
+          onClick={() => {
+            // Cycle Off -> Bass (+7dB) -> Max (+13dB) -> Off
+            const next = bassBoost === 0 ? 7 : bassBoost <= 7 ? 13 : 0;
+            onBassBoostChange?.(next);
+          }}
+          title="Bass boost (experimental) — affects Saavn / Audius / SoundCloud / uploads"
+        >
+          🎸 {bassBoost === 0 ? 'Bass' : bassBoost <= 7 ? 'Bass+' : 'Bass++'}
+        </button>
         <div className="player-volume">
           <span className="player-volume-icon">🔊</span>
           <input
