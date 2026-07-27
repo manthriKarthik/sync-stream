@@ -750,6 +750,15 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
 
   return (
     <div className="room-layout">
+      {/* Ambient background: the current song's cover art, blurred & dimmed */}
+      {activeTrack?.albumArt && (
+        <div
+          key={activeTrack.albumArt}
+          className="room-bg-art"
+          style={{ backgroundImage: `url("${activeTrack.albumArt}")` }}
+          aria-hidden="true"
+        />
+      )}
       {!audioEnabled && (
         <div
           onClick={handleEnableAudio}

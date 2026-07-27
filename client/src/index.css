@@ -506,9 +506,45 @@ input {
 
 /* Room View */
 .room-layout {
+  position: relative;
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+}
+
+/* Ambient cover-art background for the room */
+.room-bg-art {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  filter: blur(55px) saturate(1.4) brightness(0.85);
+  opacity: 0.4;
+  transform: scale(1.15);
+  pointer-events: none;
+  animation: bgArtIn 1.2s ease;
+}
+
+/* Dark veil so text stays readable over the art */
+.room-bg-art::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 50% 35%, transparent, rgba(0, 0, 0, 0.5) 92%),
+    linear-gradient(180deg, rgba(0, 0, 0, 0.25), rgba(0, 0, 0, 0.62));
+}
+
+@keyframes bgArtIn {
+  from { opacity: 0; transform: scale(1.25); }
+  to { opacity: 0.4; transform: scale(1.15); }
+}
+
+/* Keep room content above the ambient art */
+.room-main {
+  position: relative;
+  z-index: 1;
 }
 
 .room-header {
