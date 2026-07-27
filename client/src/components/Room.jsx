@@ -820,22 +820,6 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
           </span>
         </div>
         <div className="room-meta">
-          {isHost && (
-            <div className="mode-toggle">
-              <button
-                className={mode === 'host' ? 'active' : ''}
-                onClick={() => handleModeChange('host')}
-              >
-                DJ Mode
-              </button>
-              <button
-                className={mode === 'collaborative' ? 'active' : ''}
-                onClick={() => handleModeChange('collaborative')}
-              >
-                Collaborative
-              </button>
-            </div>
-          )}
           <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
             🕐 Sync: {Math.round(clockOffset)}ms offset
           </span>
