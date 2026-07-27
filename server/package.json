@@ -1,7 +1,7 @@
 {
-  "name": "sync-stream-server",
+  "name": "echofy-server",
   "version": "1.0.0",
-  "description": "Backend server for sync-stream",
+  "description": "Backend server for EchoFy",
   "main": "index.js",
   "type": "module",
   "scripts": {

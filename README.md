@@ -1,4 +1,4 @@
-# 🎵 SyncStream - Listen Together
+# 🎵 EchoFy - Listen Together
 
 A real-time multi-listener audio streaming app where multiple people can listen to the same music through their own Bluetooth earbuds in perfect sync.
 

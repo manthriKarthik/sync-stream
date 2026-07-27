@@ -1,7 +1,7 @@
 {
-  "name": "sync-stream-client",
+  "name": "echofy-client",
   "version": "1.0.0",
-  "description": "Frontend client for sync-stream",
+  "description": "Frontend client for EchoFy",
   "type": "module",
   "scripts": {
     "dev": "vite",

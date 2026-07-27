@@ -234,7 +234,7 @@ app.get('/api/youtube/search', async (req, res) => {
 // --- Audius (free, full-song streaming, no login) ---
 let audiusHostCache = null;
 let audiusHostCacheTime = 0;
-const AUDIUS_APP = 'SyncStream';
+const AUDIUS_APP = 'EchoFy';
 
 async function getAudiusHost() {
   // Cache the discovered host for 10 minutes

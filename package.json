@@ -1,5 +1,5 @@
 {
-  "name": "sync-stream",
+  "name": "echofy",
   "version": "1.0.0",
   "description": "Multi-listener synchronized audio streaming app",
   "private": true,

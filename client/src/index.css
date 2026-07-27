@@ -1,26 +1,27 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
 :root {
-  --bg-primary: #0b0b12;
-  --bg-secondary: #14141f;
-  --bg-tertiary: #1e1e2c;
-  --accent: #7c3aed;
-  --accent-2: #a855f7;
-  --accent-hover: #6d28d9;
-  --accent-glow: rgba(124, 58, 237, 0.35);
-  --text-primary: #f3f3f8;
-  --text-secondary: #a3a3b4;
-  --text-muted: #6b6b7d;
-  --border: rgba(255, 255, 255, 0.08);
-  --border-strong: rgba(255, 255, 255, 0.14);
-  --success: #10b981;
+  --bg-primary: #000000;
+  --bg-secondary: #09090c;
+  --bg-tertiary: #16161c;
+  --bg-elevated: #101014;
+  --accent: #8b5cf6;
+  --accent-2: #c084fc;
+  --accent-hover: #7c3aed;
+  --accent-glow: rgba(139, 92, 246, 0.38);
+  --text-primary: #f5f5f7;
+  --text-secondary: #9a9aa8;
+  --text-muted: #63636f;
+  --border: rgba(255, 255, 255, 0.07);
+  --border-strong: rgba(255, 255, 255, 0.15);
+  --success: #1ed760;
   --danger: #ef4444;
   --gold-1: #ffd700;
   --gold-2: #ff8c00;
   --radius: 16px;
   --radius-sm: 10px;
-  --shadow-soft: 0 8px 30px rgba(0, 0, 0, 0.35);
-  --shadow-lift: 0 12px 40px rgba(0, 0, 0, 0.5);
+  --shadow-soft: 0 8px 30px rgba(0, 0, 0, 0.55);
+  --shadow-lift: 0 18px 50px rgba(0, 0, 0, 0.75);
 }
 
 * {
@@ -40,9 +41,9 @@ body {
   overflow-x: hidden;
   background-color: var(--bg-primary);
   background-image:
-    radial-gradient(circle at 12% 18%, rgba(124, 58, 237, 0.18), transparent 42%),
-    radial-gradient(circle at 88% 12%, rgba(168, 85, 247, 0.14), transparent 40%),
-    radial-gradient(circle at 78% 88%, rgba(29, 185, 84, 0.10), transparent 45%);
+    radial-gradient(circle at 15% 10%, rgba(139, 92, 246, 0.16), transparent 40%),
+    radial-gradient(circle at 85% 14%, rgba(192, 132, 252, 0.10), transparent 42%),
+    radial-gradient(circle at 50% 108%, rgba(139, 92, 246, 0.10), transparent 46%);
   background-attachment: fixed;
   -webkit-font-smoothing: antialiased;
 }
@@ -101,7 +102,7 @@ input {
 .btn-primary {
   background: linear-gradient(135deg, var(--accent), var(--accent-2));
   color: white;
-  box-shadow: 0 6px 18px rgba(124, 58, 237, 0.35);
+  box-shadow: 0 6px 18px var(--accent-glow);
 }
 
 .btn-primary:hover {
@@ -189,14 +190,14 @@ input {
 }
 
 .landing-card {
-  background: rgba(20, 20, 31, 0.75);
+  background: rgba(9, 9, 12, 0.82);
   border: 1px solid var(--border);
   border-radius: 24px;
   padding: 44px 40px;
   max-width: 460px;
   width: 100%;
-  backdrop-filter: blur(20px);
-  box-shadow: var(--shadow-lift);
+  backdrop-filter: blur(22px);
+  box-shadow: var(--shadow-lift), inset 0 1px 0 rgba(255, 255, 255, 0.04);
   animation: cardRise 0.5s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
@@ -214,6 +215,35 @@ input {
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
+}
+
+/* EchoFy brand logo */
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.brand h1 {
+  margin-bottom: 0;
+  font-size: 38px;
+}
+
+.brand-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  background: linear-gradient(145deg, #8b5cf6, #c084fc);
+  box-shadow: 0 8px 24px var(--accent-glow), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  flex-shrink: 0;
+}
+
+.brand-mark svg {
+  display: block;
 }
 
 .landing-card p {

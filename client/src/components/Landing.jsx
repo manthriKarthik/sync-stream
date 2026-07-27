@@ -22,7 +22,17 @@ function Landing({ onCreateRoom, onJoinRoom, connected }) {
   return (
     <div className="landing">
       <div className="landing-card">
-        <h1>🎵 SyncStream</h1>
+        <div className="brand">
+          <span className="brand-mark" aria-hidden="true">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="#fff">
+              <rect x="2" y="9" width="3" height="6" rx="1.5" />
+              <rect x="7" y="5.5" width="3" height="13" rx="1.5" />
+              <rect x="12" y="2" width="3" height="20" rx="1.5" />
+              <rect x="17" y="7" width="3" height="10" rx="1.5" />
+            </svg>
+          </span>
+          <h1>EchoFy</h1>
+        </div>
         <p>Listen together in perfect sync. Create a room, invite friends, and enjoy music through your own earbuds.</p>
 
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 28, marginTop: -16 }}>

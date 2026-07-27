@@ -42,7 +42,7 @@ export function useSpotify() {
     setToken(accessToken);
 
     const spotifyPlayer = new window.Spotify.Player({
-      name: 'SyncStream',
+      name: 'EchoFy',
       getOAuthToken: (cb) => cb(accessToken),
       volume: 1.0
     });
@@ -105,7 +105,7 @@ export function useSpotify() {
     }
   }, [player]);
 
-  // Transfer playback to this SyncStream device so audio comes out here.
+  // Transfer playback to this EchoFy device so audio comes out here.
   const transferPlayback = useCallback(async () => {
     if (!token || !deviceId) return;
     try {

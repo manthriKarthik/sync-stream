@@ -637,8 +637,8 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
       try {
         navigator.mediaSession.metadata = new window.MediaMetadata({
           title: track.name || 'Unknown',
-          artist: track.artist || track.addedBy || 'SyncStream',
-          album: 'SyncStream',
+          artist: track.artist || track.addedBy || 'EchoFy',
+          album: 'EchoFy',
           artwork: track.albumArt
             ? [
                 { src: track.albumArt, sizes: '96x96', type: 'image/jpeg' },

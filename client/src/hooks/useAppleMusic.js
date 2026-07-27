@@ -35,7 +35,7 @@ export function useAppleMusic() {
       const music = await window.MusicKit.configure({
         developerToken,
         app: {
-          name: 'SyncStream',
+          name: 'EchoFy',
           build: '1.0.0'
         }
       });
