@@ -596,57 +596,6 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
     navigator.clipboard.writeText(roomState.id);
   };
 
-  // Media Session API: register the current track with the OS so lock-screen /
-  // notification media controls appear AND background/locked playback keeps its
-  // audio alive. Without a registered media session, mobile browsers throttle or
-  // silence a backgrounded <audio> element — the classic "playing but no sound
-  // when the phone is locked" bug.
-  useEffect(() => {
-    if (!('mediaSession' in navigator)) return;
-    if (!activeTrack) {
-      try { navigator.mediaSession.metadata = null; } catch (_) { /* ignore */ }
-      try { navigator.mediaSession.playbackState = 'none'; } catch (_) { /* ignore */ }
-      return;
-    }
-    try {
-      navigator.mediaSession.metadata = new window.MediaMetadata({
-        title: activeTrack.name || 'Unknown track',
-        artist: activeTrack.artist || '',
-        album: activeTrack.album || 'EchoFy',
-        artwork: activeTrack.albumArt
-          ? [
-              { src: activeTrack.albumArt, sizes: '96x96', type: 'image/jpeg' },
-              { src: activeTrack.albumArt, sizes: '256x256', type: 'image/jpeg' },
-              { src: activeTrack.albumArt, sizes: '512x512', type: 'image/jpeg' }
-            ]
-          : []
-      });
-    } catch (_) { /* ignore */ }
-  }, [activeTrack]);
-
-  // Reflect play/pause state to the OS and wire lock-screen buttons to the same
-  // synced controls the on-screen player uses.
-  useEffect(() => {
-    if (!('mediaSession' in navigator)) return;
-    const nowPlaying = !activeTrack ? false : (isPlatformTrack ? platformPlaying : isPlaying);
-    try {
-      navigator.mediaSession.playbackState = nowPlaying ? 'playing' : 'paused';
-    } catch (_) { /* ignore */ }
-    const setHandler = (action, fn) => {
-      try { navigator.mediaSession.setActionHandler(action, fn); } catch (_) { /* ignore */ }
-    };
-    setHandler('play', () => handlePlay());
-    setHandler('pause', () => handlePause());
-    setHandler('previoustrack', () => handlePrev());
-    setHandler('nexttrack', () => handleNext());
-    return () => {
-      setHandler('play', null);
-      setHandler('pause', null);
-      setHandler('previoustrack', null);
-      setHandler('nexttrack', null);
-    };
-  }, [activeTrack, isPlatformTrack, platformPlaying, isPlaying, currentTrackIndex, queue, canControl]);
-
   // Enable audio on mobile - must run from a user gesture to satisfy autoplay policies
   const handleEnableAudio = () => {
     // Unlock the local <audio> element
@@ -710,7 +659,7 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
   // helps keep the shared audio (Audius / uploads) playing while the app is
   // backgrounded or the phone is locked.
   const mediaControlsRef = useRef({});
-  mediaControlsRef.current = { handlePlay, handlePause, handleNext, handlePrev };
+  mediaControlsRef.current = { handlePlay, handlePause, handleNext, handlePrev, handleSeek };
 
   useEffect(() => {
     if (!('mediaSession' in navigator)) return;
@@ -738,23 +687,44 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
     set('pause', () => mediaControlsRef.current.handlePause?.());
     set('nexttrack', () => mediaControlsRef.current.handleNext?.());
     set('previoustrack', () => mediaControlsRef.current.handlePrev?.());
+    // Lock-screen scrubber drag + skip-forward/back buttons.
+    set('seekto', (details) => {
+      if (details && typeof details.seekTime === 'number') {
+        mediaControlsRef.current.handleSeek?.(details.seekTime);
+      }
+    });
+    set('seekbackward', (details) => {
+      const step = (details && details.seekOffset) || 10;
+      const now = navigator.mediaSession.__pos || 0;
+      mediaControlsRef.current.handleSeek?.(Math.max(0, now - step));
+    });
+    set('seekforward', (details) => {
+      const step = (details && details.seekOffset) || 10;
+      const now = navigator.mediaSession.__pos || 0;
+      const dur = navigator.mediaSession.__dur || 0;
+      mediaControlsRef.current.handleSeek?.(dur ? Math.min(dur, now + step) : now + step);
+    });
     return () => {
-      ['play', 'pause', 'nexttrack', 'previoustrack'].forEach((a) => set(a, null));
+      ['play', 'pause', 'nexttrack', 'previoustrack', 'seekto', 'seekbackward', 'seekforward'].forEach((a) => set(a, null));
     };
   }, [queue, currentTrackIndex]);
 
-  // Reflect play/pause state to the OS lock screen
+  // Reflect play/pause state to the OS lock screen (platform-aware so YouTube /
+  // Spotify tracks show the correct state too).
   useEffect(() => {
-    if ('mediaSession' in navigator) {
-      navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
-    }
-  }, [isPlaying]);
+    if (!('mediaSession' in navigator)) return;
+    const nowPlaying = !activeTrack ? false : (isPlatformTrack ? platformPlaying : isPlaying);
+    navigator.mediaSession.playbackState = !activeTrack ? 'none' : (nowPlaying ? 'playing' : 'paused');
+  }, [isPlaying, platformPlaying, isPlatformTrack, activeTrack]);
 
   // Keep the lock-screen scrubber position in sync
   useEffect(() => {
     if (!('mediaSession' in navigator) || typeof navigator.mediaSession.setPositionState !== 'function') return;
     const dur = isPlatformTrack ? platformProgress.duration : duration;
     const pos = isPlatformTrack ? platformProgress.time : currentTime;
+    // Stash latest position/duration so seekforward/backward handlers can read them.
+    navigator.mediaSession.__pos = pos;
+    navigator.mediaSession.__dur = dur;
     if (dur > 0 && pos >= 0 && pos <= dur) {
       try {
         navigator.mediaSession.setPositionState({ duration: dur, playbackRate: 1, position: pos });
