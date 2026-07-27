@@ -200,6 +200,7 @@ function MembersPanel({ members, hostId, currentUserId, isHost, socket, roomId }
               return (
                 <li
                   key={member.id}
+                  className="panel-member"
                   style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -214,7 +215,9 @@ function MembersPanel({ members, hostId, currentUserId, isHost, socket, roomId }
                   }}
                 >
                   {/* Avatar */}
-                  <div style={{
+                  <div
+                    className={isMemberHost ? 'panel-avatar panel-avatar-host' : 'panel-avatar'}
+                    style={{
                     width: 36,
                     height: 36,
                     borderRadius: '50%',
@@ -379,6 +382,7 @@ function MembersPanel({ members, hostId, currentUserId, isHost, socket, roomId }
                 return (
                   <div
                     key={i}
+                    className={isOwn ? 'chat-msg chat-msg-own' : 'chat-msg'}
                     style={{
                       padding: '8px 12px',
                       borderRadius: 12,

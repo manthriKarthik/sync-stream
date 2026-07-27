@@ -19,9 +19,33 @@ function Landing({ onCreateRoom, onJoinRoom, connected }) {
     onJoinRoom(roomCode.trim().toLowerCase(), username.trim());
   };
 
+  // Interactive spotlight + subtle 3D tilt that follows the cursor
+  const handleCardMove = (e) => {
+    const card = e.currentTarget;
+    const rect = card.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const rx = ((y / rect.height) - 0.5) * -6;
+    const ry = ((x / rect.width) - 0.5) * 6;
+    card.style.setProperty('--mx', `${x}px`);
+    card.style.setProperty('--my', `${y}px`);
+    card.style.setProperty('--rx', `${rx}deg`);
+    card.style.setProperty('--ry', `${ry}deg`);
+  };
+
+  const handleCardLeave = (e) => {
+    const card = e.currentTarget;
+    card.style.setProperty('--rx', '0deg');
+    card.style.setProperty('--ry', '0deg');
+  };
+
   return (
     <div className="landing">
-      <div className="landing-card">
+      <div
+        className="landing-card"
+        onMouseMove={handleCardMove}
+        onMouseLeave={handleCardLeave}
+      >
         <div className="brand">
           <span className="brand-mark" aria-hidden="true">
             <svg width="26" height="26" viewBox="0 0 24 24" fill="#0a0a0a">

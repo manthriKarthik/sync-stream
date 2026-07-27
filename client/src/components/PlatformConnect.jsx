@@ -346,6 +346,7 @@ function PlatformConnect({ spotify, youtube, audius, saavn, soundcloud, roomId, 
             return (
             <div
               key={track.id}
+              className="search-result-row"
               onClick={() => handleSelectTrack(track)}
               style={{
                 display: 'flex',
