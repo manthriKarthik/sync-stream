@@ -380,8 +380,8 @@ function PlatformConnect({ spotify, youtube, audius, saavn, soundcloud, roomId, 
                       padding: '4px 10px',
                       fontSize: 11,
                       fontWeight: 600,
-                      color: '#fff',
-                      background: '#1db954',
+                      color: '#000',
+                      background: '#fff',
                       borderRadius: 6,
                       whiteSpace: 'nowrap'
                     }}

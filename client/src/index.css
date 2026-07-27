@@ -5,16 +5,16 @@
   --bg-secondary: #09090c;
   --bg-tertiary: #16161c;
   --bg-elevated: #101014;
-  --accent: #8b5cf6;
-  --accent-2: #c084fc;
-  --accent-hover: #7c3aed;
-  --accent-glow: rgba(139, 92, 246, 0.38);
+  --accent: #ffffff;
+  --accent-2: #d4d4d4;
+  --accent-hover: #e5e5e5;
+  --accent-glow: rgba(255, 255, 255, 0.16);
   --text-primary: #f5f5f7;
   --text-secondary: #9a9aa8;
   --text-muted: #63636f;
   --border: rgba(255, 255, 255, 0.07);
   --border-strong: rgba(255, 255, 255, 0.15);
-  --success: #1ed760;
+  --success: #e5e5e5;
   --danger: #ef4444;
   --gold-1: #ffd700;
   --gold-2: #ff8c00;
@@ -41,9 +41,9 @@ body {
   overflow-x: hidden;
   background-color: var(--bg-primary);
   background-image:
-    radial-gradient(circle at 15% 10%, rgba(139, 92, 246, 0.16), transparent 40%),
-    radial-gradient(circle at 85% 14%, rgba(192, 132, 252, 0.10), transparent 42%),
-    radial-gradient(circle at 50% 108%, rgba(139, 92, 246, 0.10), transparent 46%);
+    radial-gradient(circle at 15% 10%, rgba(255, 255, 255, 0.06), transparent 42%),
+    radial-gradient(circle at 85% 14%, rgba(255, 255, 255, 0.04), transparent 44%),
+    radial-gradient(circle at 50% 108%, rgba(255, 255, 255, 0.05), transparent 48%);
   background-attachment: fixed;
   -webkit-font-smoothing: antialiased;
 }
@@ -101,7 +101,7 @@ input {
 
 .btn-primary {
   background: linear-gradient(135deg, var(--accent), var(--accent-2));
-  color: white;
+  color: #000;
   box-shadow: 0 6px 18px var(--accent-glow);
 }
 
@@ -151,6 +151,7 @@ input {
 .btn-icon:hover {
   background: var(--accent);
   border-color: var(--accent);
+  color: #000;
   transform: translateY(-1px);
 }
 
@@ -211,7 +212,7 @@ input {
   font-weight: 800;
   margin-bottom: 10px;
   letter-spacing: -0.5px;
-  background: linear-gradient(135deg, #a78bfa, #7c3aed 50%, #ec4899);
+  background: linear-gradient(135deg, #ffffff, #b5b5b5);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -237,8 +238,8 @@ input {
   width: 46px;
   height: 46px;
   border-radius: 14px;
-  background: linear-gradient(145deg, #8b5cf6, #c084fc);
-  box-shadow: 0 8px 24px var(--accent-glow), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  background: linear-gradient(145deg, #ffffff, #cfcfcf);
+  box-shadow: 0 8px 24px var(--accent-glow), inset 0 1px 0 rgba(0, 0, 0, 0.08);
   flex-shrink: 0;
 }
 
@@ -443,7 +444,7 @@ input {
   height: 48px;
   border-radius: 50%;
   background: linear-gradient(135deg, var(--accent), var(--accent-2));
-  color: white;
+  color: #000;
   font-size: 19px;
   display: flex;
   align-items: center;
@@ -493,7 +494,7 @@ input {
 
 .progress-bar .progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #1db954, #1ed760);
+  background: linear-gradient(90deg, #ffffff, #d4d4d4);
   border-radius: 999px;
   position: relative;
 }
@@ -670,6 +671,7 @@ input {
   height: 34px;
   border-radius: 50%;
   background: var(--accent);
+  color: #000;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -794,9 +796,9 @@ input {
 
 .platform-tab.active {
   background: linear-gradient(135deg, var(--accent), var(--accent-2));
-  color: #fff;
+  color: #111;
   border-color: transparent;
-  box-shadow: 0 4px 14px rgba(124, 58, 237, 0.35);
+  box-shadow: 0 4px 14px rgba(255, 255, 255, 0.22);
 }
 
 .platform-tab-logo {
@@ -832,8 +834,8 @@ input {
 
 .mode-toggle button.active {
   background: linear-gradient(135deg, var(--accent), var(--accent-2));
-  color: white;
-  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.35);
+  color: #000;
+  box-shadow: 0 4px 12px rgba(255, 255, 255, 0.2);
 }
 
 /* Unread badge on the sliding panel toggle */

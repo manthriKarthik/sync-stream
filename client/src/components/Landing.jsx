@@ -24,7 +24,7 @@ function Landing({ onCreateRoom, onJoinRoom, connected }) {
       <div className="landing-card">
         <div className="brand">
           <span className="brand-mark" aria-hidden="true">
-            <svg width="26" height="26" viewBox="0 0 24 24" fill="#fff">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="#0a0a0a">
               <rect x="2" y="9" width="3" height="6" rx="1.5" />
               <rect x="7" y="5.5" width="3" height="13" rx="1.5" />
               <rect x="12" y="2" width="3" height="20" rx="1.5" />

@@ -277,8 +277,12 @@ export function useAudioSync(socket, onEnded) {
       hls.attachMedia(audio);
     } else {
       // Native HLS (Safari/iOS) or a plain MP3/MP4 progressive stream.
+      // NOTE: do NOT call audio.load() right before an in-gesture play().
+      // An explicit load() aborts the pending play with
+      // "The play() request was interrupted by a call to load()", which
+      // rejects the play — leaving the timer advancing (via sync) with NO
+      // audio. Assigning .src already triggers the load implicitly.
       audio.src = url;
-      audio.load();
     }
     setCurrentTrackUrl(url);
     setCurrentTime(0);
