@@ -46,8 +46,6 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
     setVolume,
     setSharedActive,
     stop,
-    bassBoost,
-    setBassBoost,
     clockOffset
   } = useAudioSync(socket, handleTrackEnded);
 
@@ -975,8 +973,6 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
         onNext={handleNext}
         onPrev={handlePrev}
         onVolumeChange={setVolume}
-        bassBoost={bassBoost}
-        onBassBoostChange={setBassBoost}
         canControl={canControl}
       />
     </div>

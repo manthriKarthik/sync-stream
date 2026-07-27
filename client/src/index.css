@@ -554,34 +554,6 @@ input {
   gap: 8px;
 }
 
-.bass-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 6px 10px;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--text-secondary);
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  white-space: nowrap;
-}
-
-.bass-btn:hover {
-  color: var(--text-primary);
-  background: rgba(255, 255, 255, 0.12);
-}
-
-.bass-btn.active {
-  color: #0a0a0a;
-  background: var(--accent);
-  border-color: var(--accent);
-  box-shadow: 0 0 10px rgba(255, 255, 255, 0.25);
-}
-
 .player-volume-icon {
   font-size: 15px;
 }
