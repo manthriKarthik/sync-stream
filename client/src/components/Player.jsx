@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 
-function Player({ isPlaying, currentTime, duration, currentTrack, onPlay, onPause, onSeek, onNext, onPrev, onVolumeChange, canControl }) {
+function Player({ isPlaying, currentTime, duration, currentTrack, onPlay, onPause, onSeek, onNext, onPrev, onVolumeChange, canControl, crossfadeSec = 0, onCycleCrossfade }) {
   const [volume, setVolume] = useState(1);
   const [overflows, setOverflows] = useState(false);
   const progressRef = useRef(null);
@@ -135,8 +135,20 @@ function Player({ isPlaying, currentTime, duration, currentTrack, onPlay, onPaus
         </div>
       </div>
 
-      {/* Right: volume */}
+      {/* Right: crossfade + volume */}
       <div className="player-extra">
+        {onCycleCrossfade && (
+          <button
+            type="button"
+            className={`crossfade-btn ${crossfadeSec > 0 ? 'active' : ''}`}
+            onClick={onCycleCrossfade}
+            title="Crossfade between tracks (local to this device)"
+            aria-label={`Crossfade ${crossfadeSec > 0 ? crossfadeSec + ' seconds' : 'off'}`}
+          >
+            <span className="crossfade-icon">⇄</span>
+            <span className="crossfade-label">{crossfadeSec > 0 ? `${crossfadeSec}s` : 'Off'}</span>
+          </button>
+        )}
         <div className="player-volume">
           <span className="player-volume-icon">🔊</span>
           <input

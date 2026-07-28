@@ -38,6 +38,32 @@ export function useAudioSync(socket, onEnded) {
   // the previously-loaded local song would replay on top of the platform one.
   const activeIsSharedRef = useRef(true);
 
+  // --- Crossfade (local, per-device) ---
+  // A transient throwaway <audio> that plays the *outgoing* track's tail while
+  // fading down, so the incoming track can fade up over it. Purely local — it
+  // never participates in sync, so a few seconds of un-synced tail is harmless.
+  const fadeAudioRef = useRef(null);
+  // The user's desired volume (0..1). During a fade we ramp toward this.
+  const targetVolumeRef = useRef(1);
+  // Crossfade duration in seconds; 0 = disabled (default -> zero behavior change).
+  const crossfadeRef = useRef(0);
+  // Interval id for the incoming-track fade-in ramp.
+  const fadeInIntervalRef = useRef(null);
+
+  const clearFadeIn = () => {
+    if (fadeInIntervalRef.current) {
+      clearInterval(fadeInIntervalRef.current);
+      fadeInIntervalRef.current = null;
+    }
+  };
+  const teardownFadeOut = () => {
+    const f = fadeAudioRef.current;
+    if (f) {
+      try { f.pause(); f.removeAttribute('src'); f.load(); } catch (_) { /* ignore */ }
+      fadeAudioRef.current = null;
+    }
+  };
+
   // Unlock audio playback on first user interaction (bypass autoplay policy)
   useEffect(() => {
     const audio = audioRef.current;
@@ -272,6 +298,46 @@ export function useAudioSync(socket, onEnded) {
 
   const loadTrack = useCallback((url) => {
     const audio = audioRef.current;
+    const cfSeconds = crossfadeRef.current;
+    const doCrossfade = cfSeconds > 0 && activeIsSharedRef.current;
+
+    // --- Crossfade OUT: clone the currently-playing tail and fade it down ---
+    // Only when a real switch happens mid-playback (not on natural end, where
+    // the element is already paused). HLS tails are skipped (cloning an HLS
+    // stream is not worth the complexity); the incoming fade-in still applies.
+    if (doCrossfade) {
+      const oldSrc = audio.currentSrc || audio.src;
+      const oldTime = audio.currentTime;
+      const oldPlaying = !audio.paused && !!oldSrc && oldSrc !== url && !hlsRef.current;
+      if (oldPlaying) {
+        teardownFadeOut();
+        try {
+          const fade = new Audio();
+          fade.preload = 'auto';
+          fade.volume = targetVolumeRef.current;
+          fade.src = oldSrc;
+          const startVol = targetVolumeRef.current;
+          const durMs = cfSeconds * 1000;
+          const begin = performance.now();
+          fade.addEventListener('canplay', () => {
+            try { fade.currentTime = oldTime; } catch (_) { /* ignore */ }
+            fade.play().catch(() => {});
+          }, { once: true });
+          fade.load();
+          fadeAudioRef.current = fade;
+          const iv = setInterval(() => {
+            const t = (performance.now() - begin) / durMs;
+            if (t >= 1) {
+              clearInterval(iv);
+              if (fadeAudioRef.current === fade) teardownFadeOut();
+              return;
+            }
+            fade.volume = Math.max(0, startVol * (1 - t));
+          }, 40);
+        } catch (_) { /* ignore */ }
+      }
+    }
+
     // Tear down any previous HLS instance before loading a new source.
     if (hlsRef.current) {
       try { hlsRef.current.destroy(); } catch (_) { /* ignore */ }
@@ -299,6 +365,28 @@ export function useAudioSync(socket, onEnded) {
       audio.src = url;
       audio.load();
     }
+
+    // --- Crossfade IN: ramp the new track's volume 0 -> target ---
+    clearFadeIn();
+    if (doCrossfade) {
+      audio.volume = 0;
+      const durMs = cfSeconds * 1000;
+      const begin = performance.now();
+      fadeInIntervalRef.current = setInterval(() => {
+        const t = (performance.now() - begin) / durMs;
+        const target = targetVolumeRef.current;
+        if (t >= 1) {
+          audio.volume = target;
+          clearFadeIn();
+          return;
+        }
+        audio.volume = Math.max(0, Math.min(1, target * t));
+      }, 40);
+    } else {
+      // No crossfade -> ensure the user's chosen volume is applied.
+      audio.volume = targetVolumeRef.current;
+    }
+
     setCurrentTrackUrl(url);
     setCurrentTime(0);
   }, []);
@@ -309,6 +397,8 @@ export function useAudioSync(socket, onEnded) {
       try { hlsRef.current.destroy(); } catch (_) { /* ignore */ }
       hlsRef.current = null;
     }
+    clearFadeIn();
+    teardownFadeOut();
   }, []);
 
   const play = useCallback(() => {
@@ -326,6 +416,8 @@ export function useAudioSync(socket, onEnded) {
   // progress bar for a source that's no longer in the queue.
   const stop = useCallback(() => {
     const a = audioRef.current;
+    clearFadeIn();
+    teardownFadeOut();
     if (hlsRef.current) {
       try { hlsRef.current.destroy(); } catch (_) { /* ignore */ }
       hlsRef.current = null;
@@ -333,6 +425,7 @@ export function useAudioSync(socket, onEnded) {
     if (a) {
       try { a.pause(); } catch (_) { /* ignore */ }
       try { a.removeAttribute('src'); a.load(); } catch (_) { /* ignore */ }
+      a.volume = targetVolumeRef.current;
     }
     lastHardSeekRef.current = 0;
     setIsPlaying(false);
@@ -347,7 +440,17 @@ export function useAudioSync(socket, onEnded) {
   }, []);
 
   const setVolume = useCallback((vol) => {
-    audioRef.current.volume = Math.max(0, Math.min(1, vol));
+    const v = Math.max(0, Math.min(1, vol));
+    targetVolumeRef.current = v;
+    // If a fade-in is mid-flight, let the ramp converge to the new target;
+    // otherwise apply immediately.
+    if (!fadeInIntervalRef.current) audioRef.current.volume = v;
+  }, []);
+
+  // Enable/disable crossfade (local, per-device). seconds = 0 disables it, so
+  // the default is a complete no-op versus the original behavior.
+  const setCrossfade = useCallback((seconds) => {
+    crossfadeRef.current = Math.max(0, Number(seconds) || 0);
   }, []);
 
   // Tell the engine whether the active track uses this shared <audio> element.
@@ -373,6 +476,7 @@ export function useAudioSync(socket, onEnded) {
     seek,
     setVolume,
     setSharedActive,
+    setCrossfade,
     stop,
     getSyncedNow
   };

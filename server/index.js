@@ -202,17 +202,102 @@ app.post('/api/platforms/spotify/token', async (req, res) => {
   }
 });
 
-// YouTube search using youtube-sr
+// YouTube search.
+//
+// We scrape YouTube's public results page and parse the `ytInitialData` JSON
+// blob it embeds. This needs no API key/quota and is far more resilient than
+// the youtube-sr library, which periodically breaks when YouTube tweaks its
+// internal markup (e.g. the "Cannot read properties of undefined (reading
+// 'browseId')" failure). youtube-sr is kept only as a last-resort fallback.
+function formatDuration(seconds) {
+  const total = Math.max(0, Math.floor(seconds || 0));
+  const mins = Math.floor(total / 60);
+  const secs = total % 60;
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
+function parseDurationText(text) {
+  // "3:45" -> 225, "1:02:33" -> 3753
+  if (!text) return 0;
+  const parts = String(text).split(':').map((p) => parseInt(p, 10));
+  if (parts.some((n) => Number.isNaN(n))) return 0;
+  return parts.reduce((acc, n) => acc * 60 + n, 0);
+}
+
+async function scrapeYouTubeSearch(query) {
+  const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}&sp=EgIQAQ%253D%253D`; // sp filter: videos only
+  const res = await fetch(url, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Accept-Language': 'en-US,en;q=0.9',
+      // Skip the EU cookie-consent interstitial that otherwise replaces results.
+      'Cookie': 'CONSENT=YES+cb.20210328-17-p0.en+FX+700'
+    }
+  });
+  if (!res.ok) throw new Error(`YouTube responded ${res.status}`);
+  const html = await res.text();
+
+  const split = html.split('var ytInitialData = ');
+  if (split.length < 2) throw new Error('ytInitialData not found');
+  const jsonStr = split[1].split(';</script>')[0];
+  const data = JSON.parse(jsonStr);
+
+  const sections =
+    data?.contents?.twoColumnSearchResultsRenderer?.primaryContents
+      ?.sectionListRenderer?.contents || [];
+  const results = [];
+  for (const section of sections) {
+    const items = section?.itemSectionRenderer?.contents || [];
+    for (const item of items) {
+      const v = item?.videoRenderer;
+      if (!v || !v.videoId) continue;
+      const title =
+        v.title?.runs?.[0]?.text || v.title?.simpleText || 'Unknown';
+      const artist =
+        v.ownerText?.runs?.[0]?.text ||
+        v.longBylineText?.runs?.[0]?.text ||
+        'Unknown';
+      const durationText =
+        v.lengthText?.simpleText || v.lengthText?.runs?.[0]?.text || '';
+      const durationSec = parseDurationText(durationText);
+      const thumbs = v.thumbnail?.thumbnails || [];
+      const albumArt =
+        thumbs[thumbs.length - 1]?.url ||
+        `https://img.youtube.com/vi/${v.videoId}/mqdefault.jpg`;
+      results.push({
+        id: v.videoId,
+        uri: v.videoId,
+        name: title,
+        artist,
+        album: '',
+        albumArt,
+        duration: durationSec * 1000,
+        durationText: durationText || formatDuration(durationSec),
+        platform: 'youtube'
+      });
+      if (results.length >= 15) return results;
+    }
+  }
+  return results;
+}
+
 app.get('/api/youtube/search', async (req, res) => {
   const query = req.query.q;
   if (!query) return res.json({ results: [] });
 
+  // Primary: scrape ytInitialData (no API key, resilient).
+  try {
+    const results = await scrapeYouTubeSearch(query);
+    if (results.length) return res.json({ results });
+  } catch (err) {
+    console.error('YouTube scrape error:', err.message);
+  }
+
+  // Fallback: youtube-sr (may be broken depending on YouTube markup).
   try {
     const videos = await YouTube.search(query + ' music', { limit: 10, type: 'video' });
     const results = videos.map(video => {
       const durationSec = Math.floor((video.duration || 0) / 1000);
-      const mins = Math.floor(durationSec / 60);
-      const secs = durationSec % 60;
       return {
         id: video.id,
         uri: video.id,
@@ -221,7 +306,7 @@ app.get('/api/youtube/search', async (req, res) => {
         album: '',
         albumArt: video.thumbnail?.url || `https://img.youtube.com/vi/${video.id}/mqdefault.jpg`,
         duration: video.duration || 0,
-        durationText: `${mins}:${secs.toString().padStart(2, '0')}`,
+        durationText: formatDuration(durationSec),
         platform: 'youtube'
       };
     });
