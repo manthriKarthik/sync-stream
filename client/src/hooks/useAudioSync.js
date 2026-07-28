@@ -64,12 +64,19 @@ export function useAudioSync(socket, onEnded) {
 
     const unlock = () => {
       if (unlockedRef.current) return;
-      audio.play().then(() => {
-        audio.pause();
-        unlockedRef.current = true;
-      }).catch(() => {
-        unlockedRef.current = true;
-      });
+      unlockedRef.current = true;
+      const st = playbackStateRef.current;
+      // If a shared track is supposed to be playing, start it right now inside
+      // this gesture and LEAVE it playing. The old code always paused right
+      // after priming, which silenced the song the listener just joined — that
+      // was the reason a second "tap to play" was needed. Now the single join
+      // gesture is enough and playback continues on its own.
+      if (st && st.playing && audio.src && activeIsSharedRef.current) {
+        audio.play().then(() => setNeedsGesture(false)).catch(() => {});
+        return;
+      }
+      // Otherwise prime the element silently so later programmatic plays work.
+      audio.play().then(() => audio.pause()).catch(() => { /* ignore */ });
     };
 
     window.addEventListener('click', unlock);

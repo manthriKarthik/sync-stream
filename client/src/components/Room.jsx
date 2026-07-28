@@ -49,8 +49,7 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
     setVolume,
     setSharedActive,
     stop,
-    clockOffset,
-    needsGesture: sharedNeedsGesture
+    clockOffset
   } = useAudioSync(socket, handleTrackEnded);
 
   const spotify = useSpotify();
@@ -450,6 +449,29 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [queue, currentTrackIndex, audioEnabled]);
 
+  // Auto-resume shared-audio tracks (Saavn / Audius / uploads) the same way —
+  // no "tap to play" pill. Once audio is enabled the <audio> element is unlocked,
+  // so a blocked/joined-mid-song track can be resumed programmatically. We retry
+  // every 2s while it should be playing but the element is still paused.
+  useEffect(() => {
+    if (!audioEnabled) return;
+    const track = queue[currentTrackIndex];
+    const isShared = track && !!track.url && track.platform !== 'youtube' && track.platform !== 'spotify';
+    if (!isShared) return;
+
+    const id = setInterval(() => {
+      const state = platformStateRef.current;
+      if (!state || !state.playing) return;
+      const a = audioRef.current;
+      if (!a || !a.src) return;
+      if (!a.paused) return; // already playing — nothing to do
+      resume();
+    }, 2000);
+
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queue, currentTrackIndex, audioEnabled]);
+
   // joins mid-song (2nd, 3rd, ... listener) starts playing in sync instead of
   // sitting silent until the next host action.
   useEffect(() => {
@@ -660,22 +682,8 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
       socket.emit('playback:request-sync', { roomId: roomState.id });
     }
   };
-
-  // Tap-to-play fallback for shared-audio tracks (Saavn / Audius / uploads)
-  // when iOS blocks autoplay. Resumes the <audio> element from within the tap
-  // gesture and re-requests sync so the position is corrected.
-  const handleSharedTap = () => {
-    const track = queue[currentTrackIndex];
-    if (!track) return;
-    try {
-      const a = audioRef.current;
-      if (a && !a.src && track.url) loadTrack(track.url);
-    } catch (_) { /* ignore */ }
-    resume();
-    if (socket && roomState?.id) {
-      socket.emit('playback:request-sync', { roomId: roomState.id });
-    }
-  };
+  // Kept for potential manual use; auto-resume normally makes taps unnecessary.
+  void handleYouTubeTap;
 
   // Stop ALL audio on this device before leaving, so nothing keeps playing
   // after the user leaves the room (shared <audio>, YouTube, and Spotify).
@@ -879,69 +887,9 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
           }}
         >
           <span style={{ fontSize: 18 }}>🎵</span>
-          <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            <strong>{songAddedToast.addedBy}</strong> added <strong>{songAddedToast.name}</strong>
-          </span>
         </div>
       )}
 
-      {/* Fallback tap-to-play: only when the browser HARD-BLOCKS YouTube autoplay
-          on this device (needsGesture). Auto-play handles every other case, so
-          this rarely appears — it's here so a blocked listener can still start. */}
-      {audioEnabled && isPlatformTrack && activeTrack?.platform === 'youtube' &&
-        platformPlaying && youtube.needsGesture && (
-        <div
-          style={{
-            position: 'fixed',
-            bottom: 100,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            zIndex: 9998,
-            background: '#ff0000',
-            color: '#fff',
-            borderRadius: 999,
-            padding: '12px 24px',
-            boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            fontWeight: 600
-          }}
-          onClick={handleYouTubeTap}
-        >
-          ▶ Tap to play the music on this device
-        </div>
-      )}
-
-      {/* Same tap-to-play fallback for shared-audio tracks (Saavn / Audius /
-          uploads) when iOS blocks autoplay: the bar moves via the synced clock
-          but the <audio> element stays paused until the listener taps. */}
-      {audioEnabled && !isPlatformTrack && activeTrack && activeTrack.url &&
-        sharedNeedsGesture && (
-        <div
-          style={{
-            position: 'fixed',
-            bottom: 100,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            zIndex: 9998,
-            background: '#ff0000',
-            color: '#fff',
-            borderRadius: 999,
-            padding: '12px 24px',
-            boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            fontWeight: 600
-          }}
-          onClick={handleSharedTap}
-        >
-          ▶ Tap to play the music on this device
-        </div>
-      )}
       {/* Header */}
       <div className="room-header">
         <div className="room-header-left">
