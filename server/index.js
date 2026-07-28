@@ -105,11 +105,21 @@ const clockSync = new ClockSyncHandler();
 
 // Whether a given socket may control playback in a room:
 // the host, anyone in collaborative mode, or a member the host granted control.
+// Identity is resolved via the member's persistent userId so it survives
+// socket reconnects (a reconnect gets a brand-new socket id).
 function memberCanControl(room, socketId) {
   if (!room) return false;
-  if (room.hostId === socketId) return true;
+  const member = room.members[socketId];
+  if (!member) return false;
+  if (room.hostUserId && member.userId === room.hostUserId) return true;
   if (room.mode === 'collaborative') return true;
-  return !!room.members[socketId]?.canControl;
+  return !!member.canControl;
+}
+
+// Whether the given socket is the room host (by persistent userId).
+function isRoomHost(room, socketId) {
+  const member = room?.members[socketId];
+  return !!member && room.hostUserId === member.userId;
 }
 
 // REST API
@@ -702,14 +712,14 @@ io.on('connection', (socket) => {
   });
 
   // Room management
-  socket.on('room:create', ({ username, roomName }) => {
-    const room = roomManager.createRoom(roomName, socket.id, username);
+  socket.on('room:create', ({ username, roomName, userId }) => {
+    const room = roomManager.createRoom(roomName, socket.id, username, userId);
     socket.join(room.id);
     socket.emit('room:created', room);
     socket.emit('room:state', roomManager.getRoomState(room.id));
   });
 
-  socket.on('room:join', ({ roomId, username }) => {
+  socket.on('room:join', ({ roomId, username, userId }) => {
     const normalizedId = roomId?.trim()?.toLowerCase();
     const room = roomManager.getRoom(normalizedId);
     if (!room) {
@@ -717,12 +727,17 @@ io.on('connection', (socket) => {
       return;
     }
 
-    roomManager.addMember(normalizedId, socket.id, username);
+    // A (re)join cancels any pending host-reassignment grace timer.
+    if (room._hostGraceTimer) { clearTimeout(room._hostGraceTimer); room._hostGraceTimer = null; }
+
+    roomManager.addMember(normalizedId, socket.id, username, userId);
     socket.join(normalizedId);
 
-    // Notify others
+    // Notify others (used for WebRTC offers), then broadcast the full state so
+    // everyone's member list & host highlight refresh — this is what restores a
+    // host's controls after they reconnect.
     io.to(normalizedId).emit('room:member-joined', { id: socket.id, username });
-    socket.emit('room:state', roomManager.getRoomState(normalizedId));
+    io.to(normalizedId).emit('room:state', roomManager.getRoomState(normalizedId));
 
     // If something is already playing, send the current sync state to the new
     // listener so they can catch up mid-song (with a recalculated position).
@@ -893,7 +908,7 @@ io.on('connection', (socket) => {
   // Mode switching
   socket.on('room:set-mode', ({ roomId, mode }) => {
     const room = roomManager.getRoom(roomId);
-    if (!room || room.hostId !== socket.id) return;
+    if (!room || !isRoomHost(room, socket.id)) return;
     room.mode = mode;
     io.to(roomId).emit('room:mode-changed', mode);
   });
@@ -901,7 +916,7 @@ io.on('connection', (socket) => {
   // Grant/revoke playback control for a specific member (host only)
   socket.on('room:set-control', ({ roomId, memberId, allowed }) => {
     const room = roomManager.getRoom(roomId);
-    if (!room || room.hostId !== socket.id) return;
+    if (!room || !isRoomHost(room, socket.id)) return;
     if (memberId === room.hostId) return; // host always has control
     if (!roomManager.setMemberControl(roomId, memberId, allowed)) return;
     io.to(roomId).emit('room:control-changed', { memberId, allowed: !!allowed });
@@ -910,7 +925,7 @@ io.on('connection', (socket) => {
   // Kick a member (host only)
   socket.on('room:kick', ({ roomId, memberId }) => {
     const room = roomManager.getRoom(roomId);
-    if (!room || room.hostId !== socket.id) return;
+    if (!room || !isRoomHost(room, socket.id)) return;
     if (memberId === socket.id) return; // Can't kick yourself
 
     // Notify the kicked user
@@ -932,10 +947,11 @@ io.on('connection', (socket) => {
     const room = roomManager.getRoom(roomId);
     if (!room || !room.members[socket.id]) return;
 
-    const username = room.members[socket.id].username;
+    const member = room.members[socket.id];
     io.to(roomId).emit('chat:message', {
-      userId: socket.id,
-      username,
+      // Persistent userId so "my message" alignment survives reconnects.
+      userId: member.userId,
+      username: member.username,
       message,
       timestamp: Date.now()
     });
@@ -967,27 +983,55 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     console.log(`Client disconnected: ${socket.id}`);
     const rooms = roomManager.getRoomsForSocket(socket.id);
-    rooms.forEach(roomId => handleLeaveRoom(socket, roomId));
+    rooms.forEach(roomId => handleLeaveRoom(socket, roomId, true));
   });
 });
 
-function handleLeaveRoom(socket, roomId) {
+function handleLeaveRoom(socket, roomId, isDisconnect = false) {
   const room = roomManager.getRoom(roomId);
   if (!room) return;
 
+  const wasHost = isRoomHost(room, socket.id);
   roomManager.removeMember(roomId, socket.id);
   socket.leave(roomId);
   io.to(roomId).emit('room:member-left', { id: socket.id });
 
-  // If host leaves, transfer host or close room
-  if (room.hostId === socket.id) {
-    const members = Object.keys(room.members);
-    if (members.length > 0) {
-      room.hostId = members[0];
-      io.to(roomId).emit('room:host-changed', { newHostId: members[0] });
-    } else {
-      roomManager.deleteRoom(roomId);
-    }
+  const remaining = Object.keys(room.members);
+  if (remaining.length === 0) {
+    // No one left. Keep the room briefly so a reconnecting host can reclaim it;
+    // delete it only if it's still empty afterwards.
+    if (room._emptyTimer) clearTimeout(room._emptyTimer);
+    room._emptyTimer = setTimeout(() => {
+      const r = roomManager.getRoom(roomId);
+      if (r && Object.keys(r.members).length === 0) roomManager.deleteRoom(roomId);
+    }, isDisconnect ? 90000 : 5000);
+    return;
+  }
+
+  if (!wasHost) return;
+
+  // Reassign the host to the earliest-joined remaining member — but only if the
+  // original host doesn't come back (by persistent userId).
+  const reassignHost = () => {
+    const r = roomManager.getRoom(roomId);
+    if (!r) return;
+    if (Object.values(r.members).some(m => m.userId === r.hostUserId)) return; // reclaimed
+    const ids = Object.keys(r.members);
+    if (!ids.length) return;
+    const newHostSocket = ids[0];
+    r.hostId = newHostSocket;
+    r.hostUserId = r.members[newHostSocket].userId;
+    r.members[newHostSocket].canControl = true;
+    io.to(roomId).emit('room:host-changed', { newHostId: r.hostId, newHostUserId: r.hostUserId });
+    io.to(roomId).emit('room:state', roomManager.getRoomState(roomId));
+  };
+
+  if (isDisconnect) {
+    // Give the host a window to reconnect before handing off control.
+    if (room._hostGraceTimer) clearTimeout(room._hostGraceTimer);
+    room._hostGraceTimer = setTimeout(reassignHost, 45000);
+  } else {
+    reassignHost();
   }
 }
 

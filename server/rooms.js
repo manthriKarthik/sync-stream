@@ -5,15 +5,19 @@ export class RoomManager {
     this.rooms = new Map();
   }
 
-  createRoom(name, hostSocketId, hostUsername) {
+  createRoom(name, hostSocketId, hostUsername, hostUserId) {
     const id = uuidv4().slice(0, 8).toLowerCase(); // Lowercase for case-insensitive matching
+    const uid = hostUserId || hostSocketId;
     const room = {
       id,
       name: name || `${hostUsername}'s Room`,
       hostId: hostSocketId,
+      // Persistent identity of the host (survives socket reconnects). Control
+      // and "is host" checks use this, not the volatile socket id.
+      hostUserId: uid,
       mode: 'host', // 'host' or 'collaborative'
       members: {
-        [hostSocketId]: { username: hostUsername, joinedAt: Date.now() }
+        [hostSocketId]: { username: hostUsername, userId: uid, joinedAt: Date.now(), canControl: true }
       },
       queue: [],
       playbackState: {
@@ -42,22 +46,44 @@ export class RoomManager {
       id: room.id,
       name: room.name,
       hostId: room.hostId,
+      hostUserId: room.hostUserId,
       mode: room.mode,
       members: Object.entries(room.members).map(([id, data]) => ({
         id,
-        ...data,
-        isHost: id === room.hostId,
-        canControl: id === room.hostId ? true : !!data.canControl
+        userId: data.userId,
+        username: data.username,
+        joinedAt: data.joinedAt,
+        isHost: data.userId === room.hostUserId,
+        canControl: data.userId === room.hostUserId ? true : !!data.canControl
       })),
       queue: room.queue,
       playbackState: room.playbackState
     };
   }
 
-  addMember(roomId, socketId, username) {
+  addMember(roomId, socketId, username, userId) {
     const room = this.rooms.get(roomId);
     if (!room) return false;
-    room.members[socketId] = { username, joinedAt: Date.now(), canControl: false };
+    const uid = userId || socketId;
+    // Drop any stale entry for the same persistent user (a reconnect arrives
+    // with a NEW socket id) and carry over its control permission.
+    let priorControl = false;
+    for (const [sid, m] of Object.entries(room.members)) {
+      if (m.userId === uid && sid !== socketId) {
+        priorControl = priorControl || !!m.canControl;
+        delete room.members[sid];
+      }
+    }
+    const isHostUser = room.hostUserId === uid;
+    room.members[socketId] = {
+      username,
+      userId: uid,
+      joinedAt: Date.now(),
+      canControl: isHostUser ? true : priorControl
+    };
+    // Reclaim host: repoint the room's current host socket at the reconnected
+    // host so playback control works again after a break/reconnect.
+    if (isHostUser) room.hostId = socketId;
     return true;
   }
 

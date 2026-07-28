@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 
-function MembersPanel({ members, hostId, currentUserId, isHost, socket, roomId }) {
+function MembersPanel({ members, hostId, hostUserId, currentUserId, isHost, socket, roomId }) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
@@ -89,14 +89,14 @@ function MembersPanel({ members, hostId, currentUserId, isHost, socket, roomId }
     setNewMessage('');
   };
 
-  const kickMember = (memberId) => {
-    if (!isHost || memberId === currentUserId) return;
-    socket.emit('room:kick', { roomId, memberId });
+  const kickMember = (member) => {
+    if (!isHost || member.userId === currentUserId) return;
+    socket.emit('room:kick', { roomId, memberId: member.id });
   };
 
-  const toggleControl = (memberId, allowed) => {
-    if (!isHost || memberId === hostId) return;
-    socket.emit('room:set-control', { roomId, memberId, allowed });
+  const toggleControl = (member, allowed) => {
+    if (!isHost || member.userId === hostUserId) return;
+    socket.emit('room:set-control', { roomId, memberId: member.id, allowed });
   };
 
   return (
@@ -110,10 +110,10 @@ function MembersPanel({ members, hostId, currentUserId, isHost, socket, roomId }
           <div
             className="chat-toast-avatar"
             style={{
-              background: toast.userId === hostId
+              background: toast.userId === hostUserId
                 ? 'linear-gradient(135deg, #ffd700, #ff8c00)'
                 : 'var(--accent)',
-              color: toast.userId === hostId ? '#1a1a24' : '#fff'
+              color: toast.userId === hostUserId ? '#1a1a24' : '#fff'
             }}
           >
             {toast.username?.charAt(0)?.toUpperCase() || '?'}
@@ -121,7 +121,7 @@ function MembersPanel({ members, hostId, currentUserId, isHost, socket, roomId }
           <div style={{ minWidth: 0, flex: 1 }}>
             <div className="chat-toast-name">
               {toast.username}
-              {toast.userId === hostId && <span>👑</span>}
+              {toast.userId === hostUserId && <span>👑</span>}
             </div>
             <div className="chat-toast-text">{toast.message}</div>
           </div>
@@ -196,7 +196,7 @@ function MembersPanel({ members, hostId, currentUserId, isHost, socket, roomId }
           </h3>
           <ul style={{ listStyle: 'none', maxHeight: 200, overflowY: 'auto' }}>
             {members.map((member) => {
-              const isMemberHost = member.id === hostId;
+              const isMemberHost = hostUserId ? member.userId === hostUserId : member.id === hostId;
               return (
                 <li
                   key={member.id}
@@ -289,7 +289,7 @@ function MembersPanel({ members, hostId, currentUserId, isHost, socket, roomId }
                   {/* Give / Revoke control (host only, not on themselves) */}
                   {isHost && !isMemberHost && (
                     <button
-                      onClick={() => toggleControl(member.id, !member.canControl)}
+                      onClick={() => toggleControl(member, !member.canControl)}
                       title={member.canControl ? 'Revoke playback control' : 'Give playback control'}
                       style={{
                         background: member.canControl ? 'rgba(124,58,237,0.25)' : 'rgba(255,255,255,0.08)',
@@ -311,7 +311,7 @@ function MembersPanel({ members, hostId, currentUserId, isHost, socket, roomId }
                   {/* Kick button (only for host, not on themselves) */}
                   {isHost && !isMemberHost && (
                     <button
-                      onClick={() => kickMember(member.id)}
+                      onClick={() => kickMember(member)}
                       style={{
                         background: 'rgba(239,68,68,0.2)',
                         border: '1px solid rgba(239,68,68,0.3)',
@@ -377,7 +377,7 @@ function MembersPanel({ members, hostId, currentUserId, isHost, socket, roomId }
               </p>
             ) : (
               messages.map((msg, i) => {
-                const isHostMsg = msg.userId === hostId;
+                const isHostMsg = msg.userId === hostUserId;
                 const isOwn = msg.userId === currentUserId;
                 return (
                   <div

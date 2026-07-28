@@ -11,7 +11,7 @@ import Queue from './Queue';
 import MembersPanel from './MembersPanel';
 import PlatformConnect from './PlatformConnect';
 
-function Room({ socket, roomState, setRoomState, username, onLeave }) {
+function Room({ socket, roomState, setRoomState, username, userId, onLeave }) {
   const [queue, setQueue] = useState(roomState?.queue || []);
   const [members, setMembers] = useState(roomState?.members || []);
   const [mode, setMode] = useState(roomState?.mode || 'host');
@@ -25,7 +25,11 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
   const copyTimerRef = useRef(null);
   const songToastTimerRef = useRef(null);
 
-  const isHost = roomState?.hostId === socket?.id;
+  // Identity is by persistent userId (survives reconnects); fall back to the
+  // socket id for older state that doesn't carry hostUserId.
+  const isHost = roomState?.hostUserId
+    ? roomState.hostUserId === userId
+    : roomState?.hostId === socket?.id;
 
   // When a track finishes, only the HOST advances the queue. If every listener
   // emitted "next", 3+ people would skip multiple songs at once. The server
@@ -156,8 +160,17 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
     const handleControlChanged = ({ memberId, allowed }) => {
       setMembers(prev => prev.map(m => (m.id === memberId ? { ...m, canControl: allowed } : m)));
     };
-    const handleHostChanged = ({ newHostId }) => {
-      setRoomState(prev => ({ ...prev, hostId: newHostId }));
+    const handleHostChanged = ({ newHostId, newHostUserId }) => {
+      setRoomState(prev => ({ ...prev, hostId: newHostId, hostUserId: newHostUserId ?? prev.hostUserId }));
+    };
+    // Full-state refresh (fires on join and on reconnect auto-rejoin) — keeps
+    // the member list, mode, queue and host identity in sync after a break.
+    const handleRoomState = (state) => {
+      if (!state) return;
+      setMembers(state.members || []);
+      setMode(state.mode || 'host');
+      if (Array.isArray(state.queue)) setQueue(state.queue);
+      setRoomState(state);
     };
     const handleKicked = () => {
       alert('You have been removed from the room by the host.');
@@ -191,6 +204,7 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
     socket.on('room:mode-changed', handleModeChanged);
     socket.on('room:control-changed', handleControlChanged);
     socket.on('room:host-changed', handleHostChanged);
+    socket.on('room:state', handleRoomState);
     socket.on('room:kicked', handleKicked);
     socket.on('playback:sync', handlePlaybackSync);
 
@@ -202,6 +216,7 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
       socket.off('room:mode-changed', handleModeChanged);
       socket.off('room:control-changed', handleControlChanged);
       socket.off('room:host-changed', handleHostChanged);
+      socket.off('room:state', handleRoomState);
       socket.off('room:kicked', handleKicked);
       socket.off('playback:sync', handlePlaybackSync);
     };
@@ -479,7 +494,7 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
     socket.emit('playback:request-sync', { roomId: roomState.id });
   }, [socket, roomState?.id]);
 
-  const myMember = members.find(m => m.id === socket?.id);
+  const myMember = members.find(m => (userId ? m.userId === userId : m.id === socket?.id));
   const canControl = isHost || mode === 'collaborative' || !!myMember?.canControl;
 
   // YouTube/Spotify tracks report progress via their own players, not the shared <audio>
@@ -968,7 +983,8 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
       <MembersPanel
         members={members}
         hostId={roomState.hostId}
-        currentUserId={socket?.id}
+        hostUserId={roomState.hostUserId}
+        currentUserId={userId}
         isHost={isHost}
         socket={socket}
         roomId={roomState.id}
