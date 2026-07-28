@@ -901,7 +901,19 @@ io.on('connection', (socket) => {
   socket.on('queue:remove', ({ roomId, trackId }) => {
     const room = roomManager.getRoom(roomId);
     if (!room) return;
+    const removedIndex = room.queue.findIndex(t => t.id === trackId);
+    if (removedIndex === -1) return;
     room.queue = room.queue.filter(t => t.id !== trackId);
+    // Keep playbackState.trackIndex pointing at the same playing track after the
+    // removal so the current song doesn't get unloaded.
+    const ps = room.playbackState;
+    if (ps) {
+      if (removedIndex < ps.trackIndex) {
+        ps.trackIndex = Math.max(0, ps.trackIndex - 1);
+      } else if (removedIndex === ps.trackIndex) {
+        ps.trackIndex = Math.min(ps.trackIndex, Math.max(0, room.queue.length - 1));
+      }
+    }
     io.to(roomId).emit('queue:updated', room.queue);
   });
 

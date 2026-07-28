@@ -140,7 +140,26 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave }) {
   useEffect(() => {
     if (!socket) return;
 
-    const handleQueueUpdate = (newQueue) => setQueue(newQueue);
+    const handleQueueUpdate = (newQueue) => {
+      // Keep the currently-playing track selected even if items before it were
+      // removed (removing an earlier/finished song shifts indexes down, which
+      // would otherwise leave currentTrackIndex pointing past the end and
+      // unload the player / disable the controls).
+      const active = queue[currentTrackIndex];
+      if (active) {
+        const activeKey = active.id || active.url;
+        const newIdx = newQueue.findIndex(t => (t.id || t.url) === activeKey);
+        if (newIdx === -1) {
+          // The active track itself was removed — clamp to a valid index.
+          setCurrentTrackIndex(idx => Math.min(idx, Math.max(0, newQueue.length - 1)));
+        } else if (newIdx !== currentTrackIndex) {
+          setCurrentTrackIndex(newIdx);
+        }
+      } else if (currentTrackIndex > newQueue.length - 1) {
+        setCurrentTrackIndex(Math.max(0, newQueue.length - 1));
+      }
+      setQueue(newQueue);
+    };
     const handleSongAdded = ({ name, addedBy }) => {
       setSongAddedToast({ name, addedBy });
       if (songToastTimerRef.current) clearTimeout(songToastTimerRef.current);
