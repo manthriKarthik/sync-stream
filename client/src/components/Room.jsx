@@ -627,13 +627,10 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
 
   // Enable audio on mobile - must run from a user gesture to satisfy autoplay policies
   const handleEnableAudio = () => {
-    // Unlock the local <audio> element
-    try {
-      const a = audioRef.current;
-      if (a) {
-        a.play().then(() => a.pause()).catch(() => {});
-      }
-    } catch (_) { /* ignore */ }
+    // NOTE: do NOT prime the shared <audio> with play().then(pause) here — that
+    // pause fires asynchronously and would silence the track we start below,
+    // which was why a joining listener heard nothing until the host toggled
+    // play/pause. The window-level unlock handler already blesses the element.
     // Unlock the YouTube IFrame player (applies any pending synced track)
     youtube.unlock();
     // Unlock the Spotify SDK audio element if already connected
@@ -648,12 +645,18 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
     if (track?.platform === 'youtube' && ps?.playing) {
       youtube.playTrack(track.uri, computePlatformPosition(ps), true);
     } else if (track?.url && track.platform !== 'spotify' && ps?.playing) {
-      // Shared audio (Audius / uploads): start it within this gesture too so
-      // mobile listeners actually hear it. Position gets corrected by the sync.
+      // Shared audio (Saavn / Audius / uploads): start it within this gesture
+      // so mobile listeners actually hear it. Seek to the synced position first
+      // so we join exactly where the room is, then play.
       try {
         const a = audioRef.current;
         if (a) {
           if (!a.src) loadTrack(track.url);
+          setSharedActive(true);
+          const pos = computePlatformPosition(ps);
+          if (Number.isFinite(pos) && Math.abs((a.currentTime || 0) - pos) > 0.75) {
+            try { a.currentTime = pos; } catch (_) { /* ignore */ }
+          }
           a.play().catch(() => {});
         }
       } catch (_) { /* ignore */ }
