@@ -230,6 +230,19 @@ export function useYouTube(onEnded) {
     if (playerRef.current) playerRef.current.pauseVideo();
   }, []);
 
+  // Stop completely (used when leaving a room): halt playback and clear the
+  // loaded video so no audio keeps playing after the user leaves.
+  const stop = useCallback(() => {
+    const p = playerRef.current;
+    if (!p) return;
+    try { p.pauseVideo(); } catch (_) { /* ignore */ }
+    try { p.stopVideo(); } catch (_) { /* ignore */ }
+    loadedVideoIdRef.current = null;
+    pendingPlayRef.current = null;
+    setIsVideoPlaying(false);
+    setNeedsGesture(false);
+  }, []);
+
   // Resume
   const resume = useCallback(() => {
     if (playerRef.current) playerRef.current.playVideo();
@@ -298,6 +311,7 @@ export function useYouTube(onEnded) {
     playTrack,
     unlock,
     pause,
+    stop,
     resume,
     seek,
     setVolume,

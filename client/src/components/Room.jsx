@@ -659,6 +659,19 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
     }
   };
 
+  // Stop ALL audio on this device before leaving, so nothing keeps playing
+  // after the user leaves the room (shared <audio>, YouTube, and Spotify).
+  const handleLeave = () => {
+    try { stop(); } catch (_) { /* ignore */ }
+    try {
+      const a = audioRef.current;
+      if (a) { a.pause(); a.src = ''; }
+    } catch (_) { /* ignore */ }
+    try { youtube.stop(); } catch (_) { /* ignore */ }
+    try { spotify.pause(); } catch (_) { /* ignore */ }
+    onLeave();
+  };
+
   // --- Media Session: lock-screen / background controls (mobile) ---
   // Shows play/pause/next/prev on the lock screen & notification shade, and
   // helps keep the shared audio (Audius / uploads) playing while the app is
@@ -918,7 +931,7 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
           <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
             🕐 Sync: {Math.round(clockOffset)}ms offset
           </span>
-          <button className="btn btn-secondary" onClick={onLeave}>
+          <button className="btn btn-secondary" onClick={handleLeave}>
             Leave
           </button>
         </div>
