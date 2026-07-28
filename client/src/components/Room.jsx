@@ -21,6 +21,8 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
   const [audioEnabled, setAudioEnabled] = useState(false);
   const [spotifyActivated, setSpotifyActivated] = useState(false);
   const [songAddedToast, setSongAddedToast] = useState(null); // { name, addedBy }
+  const [codeCopied, setCodeCopied] = useState(false);
+  const copyTimerRef = useRef(null);
   const songToastTimerRef = useRef(null);
 
   const isHost = roomState?.hostId === socket?.id;
@@ -594,6 +596,9 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
 
   const copyRoomCode = () => {
     navigator.clipboard.writeText(roomState.id);
+    setCodeCopied(true);
+    if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    copyTimerRef.current = setTimeout(() => setCodeCopied(false), 1600);
   };
 
   // Enable audio on mobile - must run from a user gesture to satisfy autoplay policies
@@ -896,11 +901,15 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
             <span className="room-title-label">Listening Room</span>
             <div className="room-title-row">
               <h2>{roomState.name}</h2>
-              <span className="room-code" onClick={copyRoomCode} title="Click to copy">
+              <span
+                className={`room-code ${codeCopied ? 'copied' : ''}`}
+                onClick={copyRoomCode}
+                title="Click to copy"
+              >
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                   <path d="M16 1H4a2 2 0 0 0-2 2v14h2V3h12V1zm3 4H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zm0 16H8V7h11v14z" />
                 </svg>
-                {roomState.id}
+                {codeCopied ? 'Copied!' : roomState.id}
               </span>
             </div>
           </div>

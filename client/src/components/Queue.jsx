@@ -20,12 +20,19 @@ function Queue({ queue, currentIndex, onSelect, onRemove, canControl }) {
           onClick={() => canControl && onSelect(index)}
         >
           <span className="track-num">
-            {index === currentIndex ? '▶' : index + 1}
+            {index === currentIndex ? (
+              <span className="queue-eq" aria-label="Now playing">
+                <i /><i /><i />
+              </span>
+            ) : (
+              index + 1
+            )}
           </span>
           {track.albumArt && (
             <img
               src={track.albumArt}
               alt=""
+              className="queue-art"
               style={{ width: 36, height: 36, borderRadius: 4, objectFit: 'cover' }}
             />
           )}

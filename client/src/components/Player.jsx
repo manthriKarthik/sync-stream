@@ -1,8 +1,25 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 
 function Player({ isPlaying, currentTime, duration, currentTrack, onPlay, onPause, onSeek, onNext, onPrev, onVolumeChange, canControl }) {
   const [volume, setVolume] = useState(1);
+  const [overflows, setOverflows] = useState(false);
   const progressRef = useRef(null);
+  const nameRef = useRef(null);
+
+  // Only scroll the title when it's actually too long to fit
+  useEffect(() => {
+    const el = nameRef.current;
+    if (!el) return;
+    const check = () => {
+      const over = el.scrollWidth > el.clientWidth + 4;
+      setOverflows(over);
+      // Exact scroll distance so the end of the title just comes into view
+      el.style.setProperty('--marquee-w', `${el.clientWidth}px`);
+    };
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, [currentTrack?.id, currentTrack?.name]);
 
   const formatTime = (seconds) => {
     if (!seconds || isNaN(seconds)) return '0:00';
@@ -42,9 +59,12 @@ function Player({ isPlaying, currentTime, duration, currentTrack, onPlay, onPaus
             </span>
           )}
         </div>
-        <div className="player-track-text">
-          <div className={`track-name ${isPlaying && currentTrack ? 'is-live' : ''}`}>
-            {currentTrack ? currentTrack.name : 'No track loaded'}
+        <div className="player-track-text" key={currentTrack?.id || 'empty'}>
+          <div
+            ref={nameRef}
+            className={`track-name ${isPlaying && currentTrack ? 'is-live' : ''} ${overflows ? 'marquee' : ''}`}
+          >
+            <span>{currentTrack ? currentTrack.name : 'No track loaded'}</span>
           </div>
           <div className="track-artist">
             {currentTrack
