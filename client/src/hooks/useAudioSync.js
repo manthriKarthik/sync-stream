@@ -11,7 +11,13 @@ import Hls from 'hls.js';
  * - Smooth seek (avoids audible jumps for small drifts)
  */
 export function useAudioSync(socket, onEnded) {
+  // Two physical <audio> "decks". audioRef always points at the ACTIVE deck
+  // (the one the sync engine drives). deckOtherRef is the spare. For a
+  // crossfade we let the outgoing song keep playing on its current deck (it's
+  // already buffered at the right position, so there's no gap) while the new
+  // song plays on the spare deck; then we swap which one is "active".
   const audioRef = useRef(new Audio());
+  const deckOtherRef = useRef(new Audio());
   const onEndedRef = useRef(onEnded);
   onEndedRef.current = onEnded;
   const [clockOffset, setClockOffset] = useState(0);
@@ -39,16 +45,13 @@ export function useAudioSync(socket, onEnded) {
   const activeIsSharedRef = useRef(true);
 
   // --- Crossfade (local, per-device) ---
-  // A transient throwaway <audio> that plays the *outgoing* track's tail while
-  // fading down, so the incoming track can fade up over it. Purely local — it
-  // never participates in sync, so a few seconds of un-synced tail is harmless.
-  const fadeAudioRef = useRef(null);
-  // The user's desired volume (0..1). During a fade we ramp toward this.
+  // The user's desired volume (0..1). Fades ramp toward this.
   const targetVolumeRef = useRef(1);
   // Crossfade duration in seconds; 0 = disabled (default -> zero behavior change).
   const crossfadeRef = useRef(0);
-  // Interval id for the incoming-track fade-in ramp.
+  // Interval ids for the incoming fade-in and outgoing fade-out ramps.
   const fadeInIntervalRef = useRef(null);
+  const fadeOutIntervalRef = useRef(null);
 
   const clearFadeIn = () => {
     if (fadeInIntervalRef.current) {
@@ -56,37 +59,38 @@ export function useAudioSync(socket, onEnded) {
       fadeInIntervalRef.current = null;
     }
   };
-  const teardownFadeOut = () => {
-    const f = fadeAudioRef.current;
-    if (f) {
-      try { f.pause(); f.removeAttribute('src'); f.load(); } catch (_) { /* ignore */ }
-      fadeAudioRef.current = null;
+  const clearFadeOut = () => {
+    if (fadeOutIntervalRef.current) {
+      clearInterval(fadeOutIntervalRef.current);
+      fadeOutIntervalRef.current = null;
     }
   };
 
   // Unlock audio playback on first user interaction (bypass autoplay policy)
   useEffect(() => {
-    const audio = audioRef.current;
-    audio.volume = 1;
-    // Reduce buffering for lower latency
-    audio.preload = 'auto';
-    // Required for iOS/Android to allow inline + background/lock-screen playback
-    audio.setAttribute('playsinline', '');
-    audio.setAttribute('webkit-playsinline', '');
-    // Some mobile browsers only keep media alive in the background if the
-    // element is attached to the document.
-    if (!audio.parentNode) {
-      audio.style.display = 'none';
-      document.body.appendChild(audio);
-    }
+    // Prime BOTH decks so either can start playing without a fresh gesture
+    // (needed for the crossfade deck-swap and for auto-advance on mobile).
+    const decks = [audioRef.current, deckOtherRef.current];
+    decks.forEach((audio) => {
+      audio.volume = 1;
+      // Reduce buffering for lower latency
+      audio.preload = 'auto';
+      // Required for iOS/Android to allow inline + background/lock-screen playback
+      audio.setAttribute('playsinline', '');
+      audio.setAttribute('webkit-playsinline', '');
+      // Some mobile browsers only keep media alive in the background if the
+      // element is attached to the document.
+      if (!audio.parentNode) {
+        audio.style.display = 'none';
+        document.body.appendChild(audio);
+      }
+    });
 
     const unlock = () => {
       if (unlockedRef.current) return;
-      audio.play().then(() => {
-        audio.pause();
-        unlockedRef.current = true;
-      }).catch(() => {
-        unlockedRef.current = true;
+      unlockedRef.current = true;
+      decks.forEach((audio) => {
+        audio.play().then(() => { audio.pause(); }).catch(() => {});
       });
     };
 
@@ -257,7 +261,9 @@ export function useAudioSync(socket, onEnded) {
 
   // Time tracking animation
   useEffect(() => {
-    const audio = audioRef.current;
+    // Bind listeners to BOTH decks; guards below ensure only the ACTIVE deck
+    // (audioRef.current) drives React state and queue advancement.
+    const decks = [audioRef.current, deckOtherRef.current];
 
     // Throttle progress-bar state updates. Calling setCurrentTime on every
     // animation frame (~60fps) re-renders the whole Room/Player tree 60x/sec,
@@ -269,81 +275,120 @@ export function useAudioSync(socket, onEnded) {
       const now = performance.now();
       if (now - lastUpdate >= 250) {
         lastUpdate = now;
-        setCurrentTime(audio.currentTime);
+        setCurrentTime(audioRef.current.currentTime);
       }
       animFrameRef.current = requestAnimationFrame(updateTime);
     };
 
-    const handleLoadedMetadata = () => {
-      setDuration(audio.duration);
+    const handleLoadedMetadata = (e) => {
+      if (e.target === audioRef.current) setDuration(e.target.duration);
     };
 
-    const handleEnded = () => {
+    const handleEnded = (e) => {
+      // Only the ACTIVE deck ending advances the queue. During a crossfade the
+      // outgoing deck may also fire 'ended' as it finishes, but it isn't active.
+      if (e.target !== audioRef.current) return;
       setIsPlaying(false);
       // Let the Room decide how to advance (host-only, with the correct roomId).
       // The server wraps back to the first track when the queue finishes.
       onEndedRef.current?.();
     };
 
-    audio.addEventListener('loadedmetadata', handleLoadedMetadata);
-    audio.addEventListener('ended', handleEnded);
+    decks.forEach((audio) => {
+      audio.addEventListener('loadedmetadata', handleLoadedMetadata);
+      audio.addEventListener('ended', handleEnded);
+    });
     animFrameRef.current = requestAnimationFrame(updateTime);
 
     return () => {
-      audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
-      audio.removeEventListener('ended', handleEnded);
+      decks.forEach((audio) => {
+        audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
+        audio.removeEventListener('ended', handleEnded);
+      });
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
     };
   }, [socket]);
 
   const loadTrack = useCallback((url) => {
-    const audio = audioRef.current;
     const cfSeconds = crossfadeRef.current;
-    const doCrossfade = cfSeconds > 0 && activeIsSharedRef.current;
+    const active = audioRef.current;
+    const isHls = /\.m3u8(\?|$)/i.test(url || '');
+    const oldSrc = active.currentSrc || active.src;
+    // A real crossfade needs: the feature on, a shared-<audio> track, neither
+    // the old nor new track on HLS, and the current deck actually playing a
+    // *different* source. Otherwise fall back to a plain load.
+    const canCrossfade =
+      cfSeconds > 0 &&
+      activeIsSharedRef.current &&
+      !isHls &&
+      !hlsRef.current &&
+      !active.paused &&
+      !!oldSrc && oldSrc !== url;
 
-    // --- Crossfade OUT: clone the currently-playing tail and fade it down ---
-    // Only when a real switch happens mid-playback (not on natural end, where
-    // the element is already paused). HLS tails are skipped (cloning an HLS
-    // stream is not worth the complexity); the incoming fade-in still applies.
-    if (doCrossfade) {
-      const oldSrc = audio.currentSrc || audio.src;
-      const oldTime = audio.currentTime;
-      const oldPlaying = !audio.paused && !!oldSrc && oldSrc !== url && !hlsRef.current;
-      if (oldPlaying) {
-        teardownFadeOut();
-        try {
-          const fade = new Audio();
-          fade.preload = 'auto';
-          fade.volume = targetVolumeRef.current;
-          fade.src = oldSrc;
-          const startVol = targetVolumeRef.current;
-          const durMs = cfSeconds * 1000;
-          const begin = performance.now();
-          fade.addEventListener('canplay', () => {
-            try { fade.currentTime = oldTime; } catch (_) { /* ignore */ }
-            fade.play().catch(() => {});
-          }, { once: true });
-          fade.load();
-          fadeAudioRef.current = fade;
-          const iv = setInterval(() => {
-            const t = (performance.now() - begin) / durMs;
-            if (t >= 1) {
-              clearInterval(iv);
-              if (fadeAudioRef.current === fade) teardownFadeOut();
-              return;
-            }
-            fade.volume = Math.max(0, startVol * (1 - t));
-          }, 40);
-        } catch (_) { /* ignore */ }
-      }
+    if (canCrossfade) {
+      // --- DUAL-DECK CROSSFADE ---
+      const outgoing = active;                 // keeps playing from its buffered position
+      const incoming = deckOtherRef.current;   // spare deck receives the new track
+      const durMs = cfSeconds * 1000;
+
+      clearFadeIn();
+      clearFadeOut();
+
+      // Prepare + start the incoming deck at volume 0.
+      try { incoming.pause(); } catch (_) { /* ignore */ }
+      incoming.src = url;
+      incoming.load();
+      incoming.volume = 0;
+      incoming.playbackRate = 1.0;
+
+      // Make the incoming deck the ACTIVE one BEFORE playing so the sync engine
+      // (drift correction / playback:sync) immediately drives the new track.
+      audioRef.current = incoming;
+      deckOtherRef.current = outgoing;
+
+      incoming.play().catch(() => {});
+
+      // Fade the incoming deck up to the user's target volume.
+      const beginIn = performance.now();
+      fadeInIntervalRef.current = setInterval(() => {
+        const t = (performance.now() - beginIn) / durMs;
+        const target = targetVolumeRef.current;
+        if (t >= 1) {
+          incoming.volume = target;
+          clearFadeIn();
+          return;
+        }
+        incoming.volume = Math.max(0, Math.min(1, target * t));
+      }, 40);
+
+      // Fade the outgoing deck down, then pause + unload it so it becomes the
+      // clean spare for the next switch.
+      const startOutVol = outgoing.volume;
+      const beginOut = performance.now();
+      fadeOutIntervalRef.current = setInterval(() => {
+        const t = (performance.now() - beginOut) / durMs;
+        if (t >= 1) {
+          clearFadeOut();
+          try { outgoing.pause(); outgoing.removeAttribute('src'); outgoing.load(); } catch (_) { /* ignore */ }
+          outgoing.volume = targetVolumeRef.current;
+          return;
+        }
+        outgoing.volume = Math.max(0, startOutVol * (1 - t));
+      }, 40);
+
+      setCurrentTrackUrl(url);
+      setCurrentTime(0);
+      return;
     }
 
+    // --- PLAIN LOAD (no crossfade) — original behavior on the active deck ---
+    const audio = audioRef.current;
+    clearFadeIn();
     // Tear down any previous HLS instance before loading a new source.
     if (hlsRef.current) {
       try { hlsRef.current.destroy(); } catch (_) { /* ignore */ }
       hlsRef.current = null;
     }
-    const isHls = /\.m3u8(\?|$)/i.test(url || '');
     const nativeHls = audio.canPlayType('application/vnd.apple.mpegurl');
     if (isHls && !nativeHls && Hls.isSupported()) {
       // Chrome / Android: play HLS via hls.js attached to the shared <audio>.
@@ -365,27 +410,7 @@ export function useAudioSync(socket, onEnded) {
       audio.src = url;
       audio.load();
     }
-
-    // --- Crossfade IN: ramp the new track's volume 0 -> target ---
-    clearFadeIn();
-    if (doCrossfade) {
-      audio.volume = 0;
-      const durMs = cfSeconds * 1000;
-      const begin = performance.now();
-      fadeInIntervalRef.current = setInterval(() => {
-        const t = (performance.now() - begin) / durMs;
-        const target = targetVolumeRef.current;
-        if (t >= 1) {
-          audio.volume = target;
-          clearFadeIn();
-          return;
-        }
-        audio.volume = Math.max(0, Math.min(1, target * t));
-      }, 40);
-    } else {
-      // No crossfade -> ensure the user's chosen volume is applied.
-      audio.volume = targetVolumeRef.current;
-    }
+    audio.volume = targetVolumeRef.current;
 
     setCurrentTrackUrl(url);
     setCurrentTime(0);
@@ -398,7 +423,7 @@ export function useAudioSync(socket, onEnded) {
       hlsRef.current = null;
     }
     clearFadeIn();
-    teardownFadeOut();
+    clearFadeOut();
   }, []);
 
   const play = useCallback(() => {
@@ -415,18 +440,18 @@ export function useAudioSync(socket, onEnded) {
   // active track is removed) so the player bar doesn't keep showing a moving
   // progress bar for a source that's no longer in the queue.
   const stop = useCallback(() => {
-    const a = audioRef.current;
     clearFadeIn();
-    teardownFadeOut();
+    clearFadeOut();
     if (hlsRef.current) {
       try { hlsRef.current.destroy(); } catch (_) { /* ignore */ }
       hlsRef.current = null;
     }
-    if (a) {
+    [audioRef.current, deckOtherRef.current].forEach((a) => {
+      if (!a) return;
       try { a.pause(); } catch (_) { /* ignore */ }
       try { a.removeAttribute('src'); a.load(); } catch (_) { /* ignore */ }
       a.volume = targetVolumeRef.current;
-    }
+    });
     lastHardSeekRef.current = 0;
     setIsPlaying(false);
     setCurrentTime(0);
@@ -442,9 +467,11 @@ export function useAudioSync(socket, onEnded) {
   const setVolume = useCallback((vol) => {
     const v = Math.max(0, Math.min(1, vol));
     targetVolumeRef.current = v;
-    // If a fade-in is mid-flight, let the ramp converge to the new target;
-    // otherwise apply immediately.
-    if (!fadeInIntervalRef.current) audioRef.current.volume = v;
+    // If a fade is mid-flight, let the ramp converge to the new target;
+    // otherwise apply immediately to the active deck.
+    if (!fadeInIntervalRef.current && !fadeOutIntervalRef.current) {
+      audioRef.current.volume = v;
+    }
   }, []);
 
   // Enable/disable crossfade (local, per-device). seconds = 0 disables it, so
@@ -454,13 +481,16 @@ export function useAudioSync(socket, onEnded) {
   }, []);
 
   // Tell the engine whether the active track uses this shared <audio> element.
-  // When set to false (a YouTube/Spotify track is active) the shared element is
+  // When set to false (a YouTube/Spotify track is active) both shared decks are
   // paused and playback:sync events are ignored until it's shared again.
   const setSharedActive = useCallback((isShared) => {
     activeIsSharedRef.current = !!isShared;
     if (!isShared) {
-      const a = audioRef.current;
-      if (a && !a.paused) a.pause();
+      clearFadeIn();
+      clearFadeOut();
+      [audioRef.current, deckOtherRef.current].forEach((a) => {
+        if (a && !a.paused) a.pause();
+      });
     }
   }, []);
 

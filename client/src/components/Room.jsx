@@ -544,12 +544,12 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
       // it off, and mark the shared engine active so it accepts sync.
       try {
         setSharedActive(true);
+        loadTrack(track.url);
+        lastLoadedUrlRef.current = track.id || track.url;
+        // Read the active deck AFTER loadTrack — a crossfade may have swapped
+        // which underlying <audio> element is now active.
         const a = audioRef.current;
-        if (a) {
-          loadTrack(track.url);
-          lastLoadedUrlRef.current = track.id || track.url;
-          a.play().catch(() => {});
-        }
+        if (a) a.play().catch(() => {});
       } catch (_) { /* ignore */ }
     }
   };
@@ -644,11 +644,9 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
       // Shared audio (Audius / uploads): start it within this gesture too so
       // mobile listeners actually hear it. Position gets corrected by the sync.
       try {
+        if (!audioRef.current.src) loadTrack(track.url);
         const a = audioRef.current;
-        if (a) {
-          if (!a.src) loadTrack(track.url);
-          a.play().catch(() => {});
-        }
+        if (a) a.play().catch(() => {});
       } catch (_) { /* ignore */ }
     }
     if (socket && roomState?.id) {
