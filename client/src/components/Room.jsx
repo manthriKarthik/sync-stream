@@ -673,8 +673,8 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
       try {
         navigator.mediaSession.metadata = new window.MediaMetadata({
           title: track.name || 'Unknown',
-          artist: track.artist || track.addedBy || 'EchoFy',
-          album: 'EchoFy',
+          artist: track.artist || track.addedBy || 'Sonin',
+          album: 'Sonin',
           artwork: track.albumArt
             ? [
                 { src: track.albumArt, sizes: '96x96', type: 'image/jpeg' },
@@ -894,7 +894,7 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
                 <rect x="17" y="7" width="3" height="10" rx="1.5" />
               </svg>
             </span>
-            <span className="brand-name">EchoFy</span>
+            <span className="brand-name">Sonin</span>
           </div>
           <span className="header-divider" aria-hidden="true" />
           <div className="room-title-group">

@@ -1,7 +1,7 @@
 {
-  "name": "echofy-server",
+  "name": "sonin-server",
   "version": "1.0.0",
-  "description": "Backend server for EchoFy",
+  "description": "Backend server for Sonin",
   "main": "index.js",
   "type": "module",
   "scripts": {

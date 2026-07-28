@@ -55,7 +55,7 @@ function Landing({ onCreateRoom, onJoinRoom, connected }) {
               <rect x="17" y="7" width="3" height="10" rx="1.5" />
             </svg>
           </span>
-          <h1>EchoFy</h1>
+          <h1>Sonin</h1>
         </div>
         <p>Listen together in perfect sync. Create a room, invite friends, and enjoy music through your own earbuds.</p>
 

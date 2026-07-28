@@ -1,7 +1,7 @@
 {
-  "name": "echofy-client",
+  "name": "sonin-client",
   "version": "1.0.0",
-  "description": "Frontend client for EchoFy",
+  "description": "Frontend client for Sonin",
   "type": "module",
   "scripts": {
     "dev": "vite",
