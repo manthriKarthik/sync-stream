@@ -44,11 +44,13 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
     loadTrack,
     play,
     pause,
+    resume,
     seek,
     setVolume,
     setSharedActive,
     stop,
-    clockOffset
+    clockOffset,
+    needsGesture: sharedNeedsGesture
   } = useAudioSync(socket, handleTrackEnded);
 
   const spotify = useSpotify();
@@ -659,6 +661,22 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
     }
   };
 
+  // Tap-to-play fallback for shared-audio tracks (Saavn / Audius / uploads)
+  // when iOS blocks autoplay. Resumes the <audio> element from within the tap
+  // gesture and re-requests sync so the position is corrected.
+  const handleSharedTap = () => {
+    const track = queue[currentTrackIndex];
+    if (!track) return;
+    try {
+      const a = audioRef.current;
+      if (a && !a.src && track.url) loadTrack(track.url);
+    } catch (_) { /* ignore */ }
+    resume();
+    if (socket && roomState?.id) {
+      socket.emit('playback:request-sync', { roomId: roomState.id });
+    }
+  };
+
   // Stop ALL audio on this device before leaving, so nothing keeps playing
   // after the user leaves the room (shared <audio>, YouTube, and Spotify).
   const handleLeave = () => {
@@ -891,6 +909,35 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
             fontWeight: 600
           }}
           onClick={handleYouTubeTap}
+        >
+          ▶ Tap to play the music on this device
+        </div>
+      )}
+
+      {/* Same tap-to-play fallback for shared-audio tracks (Saavn / Audius /
+          uploads) when iOS blocks autoplay: the bar moves via the synced clock
+          but the <audio> element stays paused until the listener taps. */}
+      {audioEnabled && !isPlatformTrack && activeTrack && activeTrack.url &&
+        sharedNeedsGesture && (
+        <div
+          style={{
+            position: 'fixed',
+            bottom: 100,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 9998,
+            background: '#ff0000',
+            color: '#fff',
+            borderRadius: 999,
+            padding: '12px 24px',
+            boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            fontWeight: 600
+          }}
+          onClick={handleSharedTap}
         >
           ▶ Tap to play the music on this device
         </div>

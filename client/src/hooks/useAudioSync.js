@@ -16,6 +16,10 @@ export function useAudioSync(socket, onEnded) {
   onEndedRef.current = onEnded;
   const [clockOffset, setClockOffset] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
+  // True when the shared <audio> element is SUPPOSED to be playing but the
+  // browser blocked play() (iOS autoplay policy). The Room shows a tap-to-play
+  // pill for shared tracks (Saavn/Audius/upload) when this is set.
+  const [needsGesture, setNeedsGesture] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [currentTrackUrl, setCurrentTrackUrl] = useState(null);
@@ -32,6 +36,10 @@ export function useAudioSync(socket, onEnded) {
   // Timestamp of the last hard seek, to rate-limit hard seeks (avoids the iOS
   // "cut cut" stutter from seeking every drift check).
   const lastHardSeekRef = useRef(0);
+  // Latest clock offset, mirrored into a ref so gesture handlers (resume) can
+  // compute the synced position without stale closures.
+  const clockOffsetRef = useRef(0);
+  clockOffsetRef.current = clockOffset;
   // Whether the CURRENTLY active track uses this shared <audio> element
   // (Audius / uploads). When a YouTube/Spotify track is active this is false,
   // so we ignore playback:sync and keep the shared element silent — otherwise
@@ -211,8 +219,13 @@ export function useAudioSync(socket, onEnded) {
 
           if (audio.paused) {
             audio.playbackRate = 1.0;
-            audio.play().catch((err) => {
+            audio.play().then(() => {
+              setNeedsGesture(false);
+            }).catch((err) => {
+              // Blocked by the browser's autoplay policy (typically iOS). Flag
+              // it so the Room can show a tap-to-play pill for this track.
               console.error('Playback blocked:', err);
+              setNeedsGesture(true);
             });
           }
         }
@@ -259,13 +272,18 @@ export function useAudioSync(socket, onEnded) {
       onEndedRef.current?.();
     };
 
+    // Once the element is actually producing sound, clear any tap-to-play flag.
+    const handlePlaying = () => setNeedsGesture(false);
+
     audio.addEventListener('loadedmetadata', handleLoadedMetadata);
     audio.addEventListener('ended', handleEnded);
+    audio.addEventListener('playing', handlePlaying);
     animFrameRef.current = requestAnimationFrame(updateTime);
 
     return () => {
       audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
       audio.removeEventListener('ended', handleEnded);
+      audio.removeEventListener('playing', handlePlaying);
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
     };
   }, [socket]);
@@ -321,6 +339,27 @@ export function useAudioSync(socket, onEnded) {
     setIsPlaying(false);
   }, []);
 
+  // Resume the shared element from a user gesture (tap-to-play fallback for
+  // Saavn/Audius/upload tracks blocked by iOS autoplay). Aligns to the synced
+  // position first so the listener joins in sync, then plays.
+  const resume = useCallback(() => {
+    const a = audioRef.current;
+    if (!a) return;
+    const state = playbackStateRef.current;
+    if (state && state.playing && a.src) {
+      const syncedNow = Date.now() + clockOffsetRef.current;
+      const elapsed = state.syncTime ? (syncedNow - state.syncTime) / 1000 : 0;
+      const target = state.position + Math.max(0, elapsed);
+      if (Number.isFinite(target) && Math.abs(a.currentTime - target) > 0.75) {
+        try { a.currentTime = target; } catch (_) { /* ignore */ }
+      }
+    }
+    a.play().then(() => {
+      setIsPlaying(true);
+      setNeedsGesture(false);
+    }).catch(() => { /* still blocked — pill stays */ });
+  }, []);
+
   // Fully stop and unload the shared element (used when the queue empties or the
   // active track is removed) so the player bar doesn't keep showing a moving
   // progress bar for a source that's no longer in the queue.
@@ -364,12 +403,14 @@ export function useAudioSync(socket, onEnded) {
   return {
     audioRef,
     isPlaying,
+    needsGesture,
     currentTime,
     duration,
     clockOffset,
     loadTrack,
     play,
     pause,
+    resume,
     seek,
     setVolume,
     setSharedActive,
