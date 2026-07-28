@@ -904,17 +904,36 @@ io.on('connection', (socket) => {
     const removedIndex = room.queue.findIndex(t => t.id === trackId);
     if (removedIndex === -1) return;
     room.queue = room.queue.filter(t => t.id !== trackId);
-    // Keep playbackState.trackIndex pointing at the same playing track after the
-    // removal so the current song doesn't get unloaded.
-    const ps = room.playbackState;
-    if (ps) {
-      if (removedIndex < ps.trackIndex) {
-        ps.trackIndex = Math.max(0, ps.trackIndex - 1);
-      } else if (removedIndex === ps.trackIndex) {
-        ps.trackIndex = Math.min(ps.trackIndex, Math.max(0, room.queue.length - 1));
-      }
-    }
     io.to(roomId).emit('queue:updated', room.queue);
+
+    // Keep playbackState.trackIndex pointing at the correct track after removal.
+    const ps = room.playbackState;
+    if (!ps) return;
+
+    if (removedIndex < ps.trackIndex) {
+      // An earlier song was removed — the same track keeps playing, just shift
+      // its index down (position is preserved).
+      ps.trackIndex = Math.max(0, ps.trackIndex - 1);
+    } else if (removedIndex === ps.trackIndex) {
+      // The currently-playing track was removed. A different song now occupies
+      // this index, so restart it from the beginning instead of inheriting the
+      // removed song's elapsed time.
+      if (room.queue.length === 0) {
+        ps.playing = false;
+        ps.position = 0;
+        return;
+      }
+      ps.trackIndex = Math.min(ps.trackIndex, room.queue.length - 1);
+      const syncTime = Date.now() + 100;
+      room.playbackState = {
+        playing: ps.playing,
+        trackIndex: ps.trackIndex,
+        position: 0,
+        startedAt: syncTime,
+        updatedAt: syncTime
+      };
+      io.to(roomId).emit('playback:sync', { ...room.playbackState, syncTime });
+    }
   });
 
   // Mode switching
