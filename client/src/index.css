@@ -897,50 +897,6 @@ input {
   gap: 10px;
 }
 
-.crossfade-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 11px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  cursor: pointer;
-  transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
-}
-
-.crossfade-btn:hover {
-  color: var(--text-primary);
-  border-color: rgba(255, 255, 255, 0.24);
-  background: rgba(255, 255, 255, 0.09);
-  transform: translateY(-1px);
-}
-
-.crossfade-btn .crossfade-icon {
-  font-size: 14px;
-  line-height: 1;
-}
-
-.crossfade-btn.active {
-  color: #fff;
-  border-color: rgba(124, 92, 255, 0.55);
-  background: linear-gradient(135deg, rgba(124, 92, 255, 0.28), rgba(255, 92, 170, 0.22));
-  box-shadow: 0 0 14px rgba(124, 92, 255, 0.35);
-}
-
-.crossfade-btn.active .crossfade-icon {
-  animation: crossfadeSwap 1.8s ease-in-out infinite;
-}
-
-@keyframes crossfadeSwap {
-  0%, 100% { transform: translateX(-1px); opacity: 0.85; }
-  50% { transform: translateX(1px); opacity: 1; }
-}
-
 .player-volume {
   display: flex;
   align-items: center;
@@ -1823,7 +1779,6 @@ input {
   .track-name.marquee > span,
   .player-track-text,
   .room-header .room-code.copied,
-  .crossfade-btn.active .crossfade-icon,
   .room-title-group {
     animation: none !important;
   }

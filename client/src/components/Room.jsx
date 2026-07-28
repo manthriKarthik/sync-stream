@@ -23,12 +23,6 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
   const [songAddedToast, setSongAddedToast] = useState(null); // { name, addedBy }
   const [codeCopied, setCodeCopied] = useState(false);
   const copyTimerRef = useRef(null);
-  // Crossfade is a LOCAL, per-device preference (like Apple Music) — remembered
-  // in localStorage, never synced. 0 = off (default). Cycles 0 -> 3 -> 6 -> 12.
-  const [crossfadeSec, setCrossfadeSec] = useState(() => {
-    const saved = Number(localStorage.getItem('echofy-crossfade'));
-    return Number.isFinite(saved) && saved > 0 ? saved : 0;
-  });
   const songToastTimerRef = useRef(null);
 
   const isHost = roomState?.hostId === socket?.id;
@@ -53,20 +47,9 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
     seek,
     setVolume,
     setSharedActive,
-    setCrossfade,
     stop,
     clockOffset
   } = useAudioSync(socket, handleTrackEnded);
-
-  // Apply + persist the local crossfade preference whenever it changes.
-  useEffect(() => {
-    setCrossfade(crossfadeSec);
-    localStorage.setItem('echofy-crossfade', String(crossfadeSec));
-  }, [crossfadeSec, setCrossfade]);
-
-  const cycleCrossfade = useCallback(() => {
-    setCrossfadeSec((prev) => (prev === 0 ? 3 : prev === 3 ? 6 : prev === 6 ? 12 : 0));
-  }, []);
 
   const spotify = useSpotify();
   const youtube = useYouTube(handleTrackEnded);
@@ -544,12 +527,12 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
       // it off, and mark the shared engine active so it accepts sync.
       try {
         setSharedActive(true);
-        loadTrack(track.url);
-        lastLoadedUrlRef.current = track.id || track.url;
-        // Read the active deck AFTER loadTrack — a crossfade may have swapped
-        // which underlying <audio> element is now active.
         const a = audioRef.current;
-        if (a) a.play().catch(() => {});
+        if (a) {
+          loadTrack(track.url);
+          lastLoadedUrlRef.current = track.id || track.url;
+          a.play().catch(() => {});
+        }
       } catch (_) { /* ignore */ }
     }
   };
@@ -644,9 +627,11 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
       // Shared audio (Audius / uploads): start it within this gesture too so
       // mobile listeners actually hear it. Position gets corrected by the sync.
       try {
-        if (!audioRef.current.src) loadTrack(track.url);
         const a = audioRef.current;
-        if (a) a.play().catch(() => {});
+        if (a) {
+          if (!a.src) loadTrack(track.url);
+          a.play().catch(() => {});
+        }
       } catch (_) { /* ignore */ }
     }
     if (socket && roomState?.id) {
@@ -991,8 +976,6 @@ function Room({ socket, roomState, setRoomState, username, onLeave }) {
         onPrev={handlePrev}
         onVolumeChange={setVolume}
         canControl={canControl}
-        crossfadeSec={crossfadeSec}
-        onCycleCrossfade={cycleCrossfade}
       />
     </div>
   );
