@@ -132,18 +132,23 @@ export function useYouTube(onEnded) {
         setIsUnlocked(true);
       }
       const sameVideo = loadedVideoIdRef.current === videoId;
-      if (sameVideo && !fromGesture) {
-        // Same track (play/pause/seek) — realign & resume WITHOUT reloading.
-        // loadVideoById would restart the video and re-trigger mobile autoplay
-        // blocking, which is why playback used to stop on every action.
+      if (sameVideo) {
+        // Same track already loaded — realign & resume WITHOUT reloading, for
+        // BOTH silent play/pause/seek AND an explicit user tap. This is the key
+        // fix for iOS (Chrome & Safari): a gesture tap must call playVideo() on
+        // the already-loaded video. Reloading with loadVideoById here restarts
+        // the video, and iOS then re-blocks the freshly-cued clip as autoplay
+        // (the play() runs before the async load finishes, losing the gesture),
+        // so the song would never actually start.
+        try { p.unMute(); } catch (_) { /* ignore */ }
         const cur = typeof p.getCurrentTime === 'function' ? (p.getCurrentTime() || 0) : 0;
         if (typeof positionSeconds === 'number' && Math.abs(cur - positionSeconds) > 1.5) {
           p.seekTo(positionSeconds, true);
         }
         p.playVideo();
       } else {
-        // New track, or an explicit user tap: (re)load and play. Loading inside
-        // the tap gesture guarantees the browser allows playback with sound.
+        // New track: (re)load and play. Loading inside the tap gesture
+        // guarantees the browser allows playback with sound.
         try { p.unMute(); } catch (_) { /* ignore */ }
         loadedVideoIdRef.current = videoId;
         p.loadVideoById({ videoId, startSeconds: positionSeconds || 0 });
