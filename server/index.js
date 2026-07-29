@@ -729,6 +729,9 @@ io.on('connection', (socket) => {
 
     // A (re)join cancels any pending host-reassignment grace timer.
     if (room._hostGraceTimer) { clearTimeout(room._hostGraceTimer); room._hostGraceTimer = null; }
+    // ...and any pending empty-room deletion timer, so a returning member keeps
+    // the room alive.
+    if (room._emptyTimer) { clearTimeout(room._emptyTimer); room._emptyTimer = null; }
 
     roomManager.addMember(normalizedId, socket.id, username, userId);
     socket.join(normalizedId);
@@ -1029,13 +1032,16 @@ function handleLeaveRoom(socket, roomId, isDisconnect = false) {
 
   const remaining = Object.keys(room.members);
   if (remaining.length === 0) {
-    // No one left. Keep the room briefly so a reconnecting host can reclaim it;
-    // delete it only if it's still empty afterwards.
+    // No one is connected. Keep the room alive for a while so a member who just
+    // backgrounded their phone / dropped connection can return and find it —
+    // only delete it if it's still empty after the grace window.
+    // (An explicit "leave" clears out much sooner than an involuntary drop.)
     if (room._emptyTimer) clearTimeout(room._emptyTimer);
+    const graceMs = isDisconnect ? 30 * 60 * 1000 : 10 * 1000; // 30 min vs 10 s
     room._emptyTimer = setTimeout(() => {
       const r = roomManager.getRoom(roomId);
       if (r && Object.keys(r.members).length === 0) roomManager.deleteRoom(roomId);
-    }, isDisconnect ? 90000 : 5000);
+    }, graceMs);
     return;
   }
 

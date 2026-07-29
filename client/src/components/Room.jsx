@@ -77,9 +77,42 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave }) {
     const g = recentGestureLoadRef.current;
     return g.videoId === videoId && (Date.now() - g.at < 2500);
   };
+  // When the active track just changed on THIS device (via a tap OR an automatic
+  // auto-advance/sync), the new player needs a moment to load & buffer. During
+  // that window the shared clock keeps ticking, so the drift-correction and
+  // auto-start loops must NOT yank the freshly-loaded video forward to the
+  // elapsed position — doing so skips the first few seconds of the song. This
+  // covers auto-advanced tracks, which `justStartedInGesture` (gesture-only)
+  // does not.
+  const recentTrackChangeRef = useRef(0);
+  const justChangedTrack = () => Date.now() - recentTrackChangeRef.current < 3500;
   // Key (track.id||url) of the source currently loaded into the shared <audio>
   // element, so we never reload/restart a track that's already loaded.
   const lastLoadedUrlRef = useRef(null);
+  // Mirror of `audioEnabled` for use inside gesture callbacks (avoids a stale
+  // closure right after setAudioEnabled).
+  const audioEnabledRef = useRef(false);
+  audioEnabledRef.current = audioEnabled;
+
+  // Treat a playback-control tap as the audio-unlock gesture: enable the
+  // auto-resume/auto-start retry loops on this device AND prime the YouTube
+  // iframe player. Without this, a host who only ever taps Saavn/Audius tracks
+  // leaves their YouTube player locked, so a later (auto-advanced) YouTube song
+  // silently fails to play for them while other listeners hear it fine.
+  const unlockPlaybackEngines = (currentPlatform) => {
+    try { spotify.activate(); } catch (_) { /* ignore */ }
+    if (!audioEnabledRef.current) {
+      // First playback gesture on this device. Prime the YouTube player (unless
+      // we're about to start a YouTube track, which unlocks itself via
+      // playTrack(fromGesture=true)) so a later auto-advanced YouTube song can
+      // play without a manual tap.
+      if (currentPlatform !== 'youtube') {
+        try { youtube.unlock(); } catch (_) { /* ignore */ }
+      }
+      audioEnabledRef.current = true;
+      setAudioEnabled(true);
+    }
+  };
   // Remembers the last user seek so polling holds the bar at the tapped spot
   // until the platform player actually reports it (YouTube/Spotify seek async).
   const recentSeekRef = useRef({ time: 0, at: 0 });
@@ -360,6 +393,10 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave }) {
   useEffect(() => {
     const track = queue[currentTrackIndex];
     setPlatformProgress({ time: 0, duration: track?.duration ? track.duration / 1000 : 0 });
+    // Mark that the active track just changed so the drift/auto-start loops give
+    // the freshly-loaded player time to buffer before correcting its position
+    // (otherwise an auto-advanced song gets seeked past its first few seconds).
+    recentTrackChangeRef.current = Date.now();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentTrackIndex]);
 
@@ -439,6 +476,7 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave }) {
       const state = platformStateRef.current;
       if (!state || !state.playing) return;
       if (justStartedInGesture(track.uri)) return; // let a fresh gesture-load settle
+      if (justChangedTrack()) return; // let an auto-advanced track buffer from its start
       const expected = computePlatformPosition(state);
       const actual = youtube.getPosition();
       if (typeof actual !== 'number' || actual <= 0) return;
@@ -466,6 +504,7 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave }) {
       const state = platformStateRef.current;
       if (!state || !state.playing) return;
       if (justStartedInGesture(track.uri)) return; // let a fresh gesture-load settle
+      if (justChangedTrack()) return; // let an auto-advanced track buffer from its start
       const { needsGesture, isVideoPlaying } = ytStatusRef.current;
       if (isVideoPlaying) return; // already playing — nothing to do
       // Don't force-restart a track that has essentially finished. When a song
@@ -538,6 +577,9 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave }) {
     if (!canControl) return;
     // Unlock the Spotify SDK audio element on this device (must be in a gesture)
     spotify.activate();
+    // Also unlock YouTube + enable the auto-resume loops so a YouTube track
+    // resumes on this device even if it wasn't started by a direct tap.
+    unlockPlaybackEngines(activeTrack?.platform);
     // For YouTube/Spotify tracks the shared <audio> currentTime is meaningless,
     // so resume from the real platform position instead of snapping to 0/stale.
     const position = isPlatformTrack
@@ -563,6 +605,10 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave }) {
   // but it doesn't play" for YouTube AND Saavn/Audius/upload tracks.
   const startTrackInGesture = (track) => {
     if (!track) return;
+    // This tap is a user gesture — unlock the audio engines so a later
+    // auto-advanced track (esp. YouTube) plays on this device without a manual
+    // tap, and so the auto-resume retry loops become active.
+    unlockPlaybackEngines(track.platform);
     // Snap the progress bar back to the start instantly (like Spotify) instead
     // of leaving it at the previous song's position until polling catches up.
     setPlatformProgress({ time: 0, duration: track.duration ? track.duration / 1000 : 0 });

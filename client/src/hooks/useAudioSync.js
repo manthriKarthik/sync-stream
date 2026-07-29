@@ -36,6 +36,12 @@ export function useAudioSync(socket, onEnded) {
   // Timestamp of the last hard seek, to rate-limit hard seeks (avoids the iOS
   // "cut cut" stutter from seeking every drift check).
   const lastHardSeekRef = useRef(0);
+  // Timestamp of the last fresh track load. For a few seconds after a new song
+  // loads (e.g. an auto-advanced Saavn/Audius track), the element starts at 0
+  // and needs time to buffer while the synced clock keeps ticking. Correcting
+  // during this window would hard-seek the song forward past its first few
+  // seconds, so drift correction is suppressed until the new track settles.
+  const recentLoadRef = useRef(0);
   // Latest clock offset, mirrored into a ref so gesture handlers (resume) can
   // compute the synced position without stale closures.
   const clockOffsetRef = useRef(0);
@@ -155,6 +161,13 @@ export function useAudioSync(socket, onEnded) {
       // Skip if a previous correction hasn't settled yet (still seeking) or the
       // audio isn't buffered enough to play smoothly.
       if (audio.seeking || audio.readyState < 3) return;
+
+      // A freshly-loaded track (auto-advance / new song) starts at 0 and needs
+      // a moment to buffer while the clock keeps advancing. Don't seek it
+      // forward during this window or it skips its first few seconds; once the
+      // song has been playing from 0 the clock and playback re-converge on their
+      // own.
+      if (Date.now() - recentLoadRef.current < 3500) return;
 
       const syncedNow = Date.now() + clockOffset;
       const elapsed = (syncedNow - state.syncTime) / 1000;
@@ -326,6 +339,7 @@ export function useAudioSync(socket, onEnded) {
     }
     setCurrentTrackUrl(url);
     setCurrentTime(0);
+    recentLoadRef.current = Date.now();
   }, []);
 
   // Clean up the HLS instance when the hook unmounts.
