@@ -22,6 +22,10 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave }) {
   const [spotifyActivated, setSpotifyActivated] = useState(false);
   const [songAddedToast, setSongAddedToast] = useState(null); // { name, addedBy }
   const [codeCopied, setCodeCopied] = useState(false);
+  // Personal (local-only) mute: silences ALL audio engines on THIS device while
+  // the room keeps playing, so a listener can step away and rejoin in sync just
+  // by un-muting. Does NOT affect anyone else's playback.
+  const [personalMuted, setPersonalMuted] = useState(false);
   const copyTimerRef = useRef(null);
   const songToastTimerRef = useRef(null);
 
@@ -705,6 +709,34 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave }) {
     copyTimerRef.current = setTimeout(() => setCodeCopied(false), 1600);
   };
 
+  // Personal mute toggle — silence/​restore audio on THIS device only. The room
+  // keeps playing for everyone else, so un-muting drops the listener straight
+  // back in sync. Works for every platform (shared <audio>, YouTube, Spotify).
+  const applyPersonalMute = (muted) => {
+    try { const a = audioRef.current; if (a) a.muted = muted; } catch (_) { /* ignore */ }
+    try { if (muted) youtube.mute(); else youtube.unmute(); } catch (_) { /* ignore */ }
+    try { if (spotify.isConnected) spotify.setVolume(muted ? 0 : 1); } catch (_) { /* ignore */ }
+  };
+  const togglePersonalMute = () => {
+    setPersonalMuted((prev) => {
+      const next = !prev;
+      applyPersonalMute(next);
+      // Coming back: re-sync so a slightly-drifted device snaps to the room.
+      if (!next && socket && roomState?.id) {
+        socket.emit('playback:request-sync', { roomId: roomState.id });
+      }
+      return next;
+    });
+  };
+
+  // Re-apply the personal mute whenever the active track changes (an
+  // auto-advanced song loads a fresh source / player state that would otherwise
+  // start audible again on this device).
+  useEffect(() => {
+    if (personalMuted) applyPersonalMute(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentTrackIndex, personalMuted]);
+
   // Enable audio on mobile - must run from a user gesture to satisfy autoplay policies
   const handleEnableAudio = () => {
     // NOTE: do NOT prime the shared <audio> with play().then(pause) here — that
@@ -1009,6 +1041,13 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave }) {
           <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
             🕐 Sync: {Math.round(clockOffset)}ms offset
           </span>
+          <button
+            className={`btn ${personalMuted ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={togglePersonalMute}
+            title={personalMuted ? 'Unmute audio on this device' : 'Mute audio on this device (the room keeps playing)'}
+          >
+            {personalMuted ? '🔇 Muted' : '🔊 Listening'}
+          </button>
           <button className="btn btn-secondary" onClick={handleLeave}>
             Leave
           </button>

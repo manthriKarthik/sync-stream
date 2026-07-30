@@ -21,6 +21,11 @@ export function useYouTube(onEnded) {
   const unlockedRef = useRef(false);
   const pendingPlayRef = useRef(null); // { videoId, positionSeconds } queued until unlock
   const loadedVideoIdRef = useRef(null); // currently-loaded video, to avoid needless reloads
+  // Personal (local-only) mute. When the user mutes on THIS device, we must
+  // keep the player muted even though playTrack() calls unMute() on every
+  // play/resume/auto-advance — otherwise a track change would silently
+  // un-mute them. All unMute() calls below are guarded by this flag.
+  const mutedRef = useRef(false);
 
   // Load YouTube IFrame API
   useEffect(() => {
@@ -140,7 +145,7 @@ export function useYouTube(onEnded) {
         // the video, and iOS then re-blocks the freshly-cued clip as autoplay
         // (the play() runs before the async load finishes, losing the gesture),
         // so the song would never actually start.
-        try { p.unMute(); } catch (_) { /* ignore */ }
+        try { if (!mutedRef.current) p.unMute(); } catch (_) { /* ignore */ }
         const cur = typeof p.getCurrentTime === 'function' ? (p.getCurrentTime() || 0) : 0;
         if (typeof positionSeconds === 'number' && Math.abs(cur - positionSeconds) > 1.5) {
           p.seekTo(positionSeconds, true);
@@ -149,7 +154,7 @@ export function useYouTube(onEnded) {
       } else {
         // New track: (re)load and play. Loading inside the tap gesture
         // guarantees the browser allows playback with sound.
-        try { p.unMute(); } catch (_) { /* ignore */ }
+        try { if (!mutedRef.current) p.unMute(); } catch (_) { /* ignore */ }
         loadedVideoIdRef.current = videoId;
         p.loadVideoById({ videoId, startSeconds: positionSeconds || 0 });
         p.playVideo();
@@ -258,6 +263,17 @@ export function useYouTube(onEnded) {
     if (playerRef.current) playerRef.current.setVolume(vol * 100);
   }, []);
 
+  // Personal mute / unmute (local only — does not affect the room). The flag is
+  // remembered so a later playTrack()/auto-advance keeps the user muted.
+  const mute = useCallback(() => {
+    mutedRef.current = true;
+    try { playerRef.current?.mute(); } catch (_) { /* ignore */ }
+  }, []);
+  const unmute = useCallback(() => {
+    mutedRef.current = false;
+    try { playerRef.current?.unMute(); } catch (_) { /* ignore */ }
+  }, []);
+
   // Get current time (seconds)
   const getPosition = useCallback(() => {
     if (!playerRef.current) return 0;
@@ -315,6 +331,8 @@ export function useYouTube(onEnded) {
     resume,
     seek,
     setVolume,
+    mute,
+    unmute,
     getPosition,
     getDuration,
     searchTracks,
