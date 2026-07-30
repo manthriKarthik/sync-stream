@@ -564,40 +564,29 @@ let saavnTopArtistsCacheAt = 0;
 function isRealArtistImage(url) {
   if (!url || typeof url !== 'string') return false;
   const u = url.toLowerCase();
+  // Deezer's default artist silhouette lives under an empty artist path.
+  if (u.includes('/artist//')) return false;
   return !u.includes('default') && !u.includes('placeholder');
 }
 
+// Resolve an artist photo dynamically. Deezer's public search API needs no key,
+// is CORS/proxy friendly, and returns high-res artist portraits — so the top
+// artists can change freely and photos keep resolving automatically.
 async function resolveSaavnArtist(query, retries = 2) {
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
-      const url = `${SAAVN_ENDPOINT}?__call=autocomplete.get&_format=json&_marker=0&cc=in` +
-        `&includeMetaTags=1&query=${encodeURIComponent(query)}`;
+      const url = `https://api.deezer.com/search/artist?limit=1&q=${encodeURIComponent(query)}`;
       const response = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
-      if (!response.ok) throw new Error(`autocomplete failed: ${response.status}`);
+      if (!response.ok) throw new Error(`deezer search failed: ${response.status}`);
       const data = await response.json();
-      let list = data?.artists?.data || data?.artists || [];
-      if (!Array.isArray(list)) list = [];
-      // Prefer entries that are genuinely artists (not song/album credits).
-      const artistsOnly = list.filter(
-        (x) => !x?.type || x.type === 'artist'
-      );
-      const candidates = artistsOnly.length ? artistsOnly : list;
-      // Pick the candidate whose name best matches the query.
-      const qLower = query.toLowerCase();
-      const best =
-        candidates.find((x) => (x.title || x.name || '').toLowerCase() === qLower) ||
-        candidates.find((x) => (x.title || x.name || '').toLowerCase().includes(qLower.split(' ')[0])) ||
-        candidates[0] ||
-        null;
+      const best = Array.isArray(data?.data) ? data.data[0] : null;
       if (!best) return null;
-      const rawImage = (best.image || '')
-        .replace('150x150', '500x500')
-        .replace('50x50', '500x500');
+      const rawImage = best.picture_xl || best.picture_big || best.picture_medium || '';
       const image = isRealArtistImage(rawImage) ? rawImage : null;
-      return { id: best.id || null, image };
+      return { id: best.id ? String(best.id) : null, image };
     } catch (err) {
       if (attempt === retries) {
-        console.error(`Saavn artist resolve error (${query}):`, err.message);
+        console.error(`Artist image resolve error (${query}):`, err.message);
         return null;
       }
       await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
