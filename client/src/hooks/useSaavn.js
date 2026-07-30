@@ -30,10 +30,25 @@ export function useSaavn() {
     }
   }, []);
 
+  // Fetch the curated "Top Artists" showcase grouped by language
+  // ({ telugu: [...], hindi: [...], english: [...], tamil: [...] }).
+  const getTopArtists = useCallback(async () => {
+    try {
+      const res = await fetch('/api/saavn/top-artists');
+      if (!res.ok) return {};
+      const data = await res.json();
+      return data.artists || {};
+    } catch (err) {
+      console.error('Saavn top-artists error:', err);
+      return {};
+    }
+  }, []);
+
   return {
     isReady,
     isConnected,
     error,
-    searchTracks
+    searchTracks,
+    getTopArtists
   };
 }

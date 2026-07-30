@@ -528,6 +528,110 @@ app.get('/api/saavn/stream', async (req, res) => {
   }
 });
 
+// --- Saavn "Top Artists" showcase (grouped by language) --------------------
+// A curated list of the top 3 artists/composers per language. Photos + ids are
+// resolved live from JioSaavn's autocomplete API (so the images stay accurate)
+// and cached in memory so we only hit Saavn once.
+const SAAVN_TOP_ARTISTS = {
+  telugu: [
+    { q: 'Devi Sri Prasad', role: 'Composer' },
+    { q: 'Thaman S', role: 'Composer' },
+    { q: 'S. P. Balasubrahmanyam', role: 'Singer' }
+  ],
+  hindi: [
+    { q: 'Arijit Singh', role: 'Singer' },
+    { q: 'A. R. Rahman', role: 'Composer' },
+    { q: 'Pritam', role: 'Composer' }
+  ],
+  english: [
+    { q: 'Ed Sheeran', role: 'Artist' },
+    { q: 'The Weeknd', role: 'Artist' },
+    { q: 'Taylor Swift', role: 'Artist' }
+  ],
+  tamil: [
+    { q: 'Anirudh Ravichander', role: 'Composer' },
+    { q: 'A. R. Rahman', role: 'Composer' },
+    { q: 'Yuvan Shankar Raja', role: 'Composer' }
+  ]
+};
+
+let saavnTopArtistsCache = null;
+let saavnTopArtistsCacheAt = 0;
+
+async function resolveSaavnArtist(query, retries = 2) {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const url = `${SAAVN_ENDPOINT}?__call=autocomplete.get&_format=json&_marker=0&cc=in` +
+        `&includeMetaTags=1&query=${encodeURIComponent(query)}`;
+      const response = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+      if (!response.ok) throw new Error(`autocomplete failed: ${response.status}`);
+      const data = await response.json();
+      const list = data?.artists?.data || data?.artists || [];
+      const first = Array.isArray(list) ? list[0] : null;
+      if (!first) return null;
+      const image = (first.image || '')
+        .replace('150x150', '500x500')
+        .replace('50x50', '500x500');
+      return {
+        id: first.id || null,
+        name: decodeEntities(first.title || first.name || query),
+        image: image || null
+      };
+    } catch (err) {
+      if (attempt === retries) {
+        console.error(`Saavn artist resolve error (${query}):`, err.message);
+        return null;
+      }
+      await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+    }
+  }
+  return null;
+}
+
+app.get('/api/saavn/top-artists', async (req, res) => {
+  // Serve from cache for 24h.
+  if (saavnTopArtistsCache && Date.now() - saavnTopArtistsCacheAt < 24 * 60 * 60 * 1000) {
+    return res.json(saavnTopArtistsCache);
+  }
+  try {
+    const out = {};
+    let resolvedImages = 0;
+    let total = 0;
+    for (const [lang, artists] of Object.entries(SAAVN_TOP_ARTISTS)) {
+      const resolved = await Promise.all(
+        artists.map(async ({ q, role }) => {
+          total++;
+          const info = await resolveSaavnArtist(q);
+          if (info?.image) resolvedImages++;
+          return {
+            name: info?.name || q,
+            query: q,
+            role,
+            image: info?.image || null,
+            id: info?.id || null
+          };
+        })
+      );
+      out[lang] = resolved;
+    }
+    const payload = { artists: out };
+    // Only long-cache a healthy result. If Saavn was unreachable (no photos
+    // resolved) keep the cache short so the next request retries instead of
+    // serving photoless cards for 24h.
+    if (resolvedImages >= Math.ceil(total / 2)) {
+      saavnTopArtistsCache = payload;
+      saavnTopArtistsCacheAt = Date.now();
+    } else {
+      saavnTopArtistsCache = payload;
+      saavnTopArtistsCacheAt = Date.now() - (24 * 60 * 60 * 1000) + (60 * 1000); // ~1 min TTL
+    }
+    res.json(payload);
+  } catch (err) {
+    console.error('Saavn top-artists error:', err.message);
+    res.json({ artists: {} });
+  }
+});
+
 
 // --- SoundCloud (free, huge English catalog, direct progressive MP3 streams) ---
 // SoundCloud's public API needs a `client_id`, which is embedded in their web

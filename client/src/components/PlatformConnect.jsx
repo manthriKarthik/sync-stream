@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import Upload from './Upload';
 import PlatformLogo from './PlatformLogo';
 
@@ -19,26 +19,27 @@ function PlatformConnect({ spotify, youtube, audius, saavn, soundcloud, roomId, 
   const [activeTab, setActiveTab] = useState('audius');
   const [showPanel, setShowPanel] = useState(false);
   const [youtubeUrl, setYoutubeUrl] = useState('');
+  // Saavn "Top Artists" showcase (shown on the Saavn tab before searching).
+  const [topArtists, setTopArtists] = useState({});
+  const [artistsLoading, setArtistsLoading] = useState(false);
+  const [artistLang, setArtistLang] = useState('telugu');
 
-  const handleSearch = useCallback(async (e) => {
-    e.preventDefault();
-    if (!searchQuery.trim()) return;
-
+  const performSearch = useCallback(async (query) => {
+    if (!query || !query.trim()) return;
     setSearching(true);
     setSearchResults([]);
-
     try {
       let results = [];
       if (activeTab === 'audius') {
-        results = await audius.searchTracks(searchQuery);
+        results = await audius.searchTracks(query);
       } else if (activeTab === 'saavn') {
-        results = await saavn.searchTracks(searchQuery);
+        results = await saavn.searchTracks(query);
       } else if (activeTab === 'soundcloud') {
-        results = await soundcloud.searchTracks(searchQuery);
+        results = await soundcloud.searchTracks(query);
       } else if (activeTab === 'youtube') {
-        results = await youtube.searchTracks(searchQuery);
+        results = await youtube.searchTracks(query);
       } else if (activeTab === 'spotify' && spotify.isConnected) {
-        results = await spotify.searchTracks(searchQuery);
+        results = await spotify.searchTracks(query);
       }
       setSearchResults(results);
     } catch (err) {
@@ -46,7 +47,28 @@ function PlatformConnect({ spotify, youtube, audius, saavn, soundcloud, roomId, 
     } finally {
       setSearching(false);
     }
-  }, [searchQuery, activeTab, spotify, youtube, audius, saavn, soundcloud]);
+  }, [activeTab, spotify, youtube, audius, saavn, soundcloud]);
+
+  const handleSearch = useCallback((e) => {
+    e.preventDefault();
+    performSearch(searchQuery);
+  }, [performSearch, searchQuery]);
+
+  // Tap a showcased artist: search their catalogue and show the songs.
+  const handleArtistClick = useCallback((artist) => {
+    setSearchQuery(artist.query || artist.name);
+    performSearch(artist.query || artist.name);
+  }, [performSearch]);
+
+  // Load the Saavn top-artists showcase the first time the Saavn tab opens.
+  useEffect(() => {
+    if (activeTab !== 'saavn') return;
+    if (Object.keys(topArtists).length > 0 || artistsLoading) return;
+    setArtistsLoading(true);
+    saavn.getTopArtists()
+      .then((data) => setTopArtists(data || {}))
+      .finally(() => setArtistsLoading(false));
+  }, [activeTab, saavn, topArtists, artistsLoading]);
 
   // Update the query; clearing the box also clears the results list.
   const handleSearchChange = (value) => {
@@ -218,6 +240,85 @@ function PlatformConnect({ spotify, youtube, audius, saavn, soundcloud, roomId, 
               {searching ? '...' : '🔍'}
             </button>
           </form>
+
+          {/* Top Artists showcase — shown as the default view before searching. */}
+          {!searchQuery.trim() && searchResults.length === 0 && !searching && (
+            <div style={{ marginTop: 4 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>⭐ Top Artists</h4>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {['telugu', 'hindi', 'english', 'tamil'].map((lang) => (
+                    <button
+                      key={lang}
+                      onClick={() => setArtistLang(lang)}
+                      style={{
+                        padding: '4px 12px',
+                        fontSize: 12,
+                        fontWeight: 600,
+                        textTransform: 'capitalize',
+                        borderRadius: 999,
+                        cursor: 'pointer',
+                        border: '1px solid var(--border)',
+                        background: artistLang === lang ? 'var(--accent, #7c3aed)' : 'transparent',
+                        color: artistLang === lang ? '#fff' : 'var(--text-secondary)',
+                        transition: 'all 0.15s'
+                      }}
+                    >
+                      {lang}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {artistsLoading ? (
+                <p style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', padding: '20px 0' }}>
+                  Loading artists…
+                </p>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+                  {(topArtists[artistLang] || []).map((artist) => (
+                    <button
+                      key={artist.query}
+                      onClick={() => handleArtistClick(artist)}
+                      title={`Show ${artist.name}'s songs`}
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: 8,
+                        padding: '14px 8px',
+                        borderRadius: 14,
+                        cursor: 'pointer',
+                        border: '1px solid var(--border)',
+                        background: 'var(--bg-tertiary, rgba(255,255,255,0.04))',
+                        transition: 'transform 0.15s, background 0.15s'
+                      }}
+                      onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(124,58,237,0.15)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
+                      onMouseOut={(e) => { e.currentTarget.style.background = 'var(--bg-tertiary, rgba(255,255,255,0.04))'; e.currentTarget.style.transform = 'none'; }}
+                    >
+                      {artist.image ? (
+                        <img
+                          src={artist.image}
+                          alt={artist.name}
+                          style={{ width: 72, height: 72, borderRadius: '50%', objectFit: 'cover', boxShadow: '0 4px 12px rgba(0,0,0,0.35)' }}
+                        />
+                      ) : (
+                        <div style={{ width: 72, height: 72, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26, background: 'linear-gradient(135deg,#7c3aed,#a855f7)', color: '#fff' }}>
+                          {artist.name?.[0] || '🎵'}
+                        </div>
+                      )}
+                      <div style={{ textAlign: 'center', minWidth: 0, width: '100%' }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {artist.name}
+                        </div>
+                        <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{artist.role}</div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
