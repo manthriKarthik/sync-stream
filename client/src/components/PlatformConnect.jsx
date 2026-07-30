@@ -258,8 +258,8 @@ function PlatformConnect({ spotify, youtube, audius, saavn, soundcloud, roomId, 
                         textTransform: 'capitalize',
                         borderRadius: 999,
                         cursor: 'pointer',
-                        border: '1px solid var(--border)',
-                        background: artistLang === lang ? 'var(--accent, #7c3aed)' : 'transparent',
+                        border: artistLang === lang ? '1px solid #7c3aed' : '1px solid var(--border)',
+                        background: artistLang === lang ? '#7c3aed' : 'transparent',
                         color: artistLang === lang ? '#fff' : 'var(--text-secondary)',
                         transition: 'all 0.15s'
                       }}
@@ -289,6 +289,7 @@ function PlatformConnect({ spotify, youtube, audius, saavn, soundcloud, roomId, 
                         padding: '14px 8px',
                         borderRadius: 14,
                         cursor: 'pointer',
+                        color: '#f5f5f7',
                         border: '1px solid var(--border)',
                         background: 'var(--bg-tertiary, rgba(255,255,255,0.04))',
                         transition: 'transform 0.15s, background 0.15s'
@@ -308,7 +309,7 @@ function PlatformConnect({ spotify, youtube, audius, saavn, soundcloud, roomId, 
                         </div>
                       )}
                       <div style={{ textAlign: 'center', minWidth: 0, width: '100%' }}>
-                        <div style={{ fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: '#f5f5f7', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                           {artist.name}
                         </div>
                         <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{artist.role}</div>
@@ -437,6 +438,29 @@ function PlatformConnect({ spotify, youtube, audius, saavn, soundcloud, roomId, 
           </p>
           <Upload roomId={roomId} userId={userId} />
         </div>
+      )}
+
+      {/* Back to Top Artists (Saavn only, when showing search results) */}
+      {activeTab === 'saavn' && (searchResults.length > 0 || searchQuery.trim()) && (
+        <button
+          onClick={() => { setSearchQuery(''); setSearchResults([]); }}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            marginTop: 4,
+            padding: '6px 12px',
+            fontSize: 12,
+            fontWeight: 600,
+            color: '#f5f5f7',
+            background: 'rgba(255,255,255,0.06)',
+            border: '1px solid var(--border)',
+            borderRadius: 999,
+            cursor: 'pointer'
+          }}
+        >
+          ← Back to Top Artists
+        </button>
       )}
 
       {/* Search Results */}

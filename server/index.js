@@ -558,6 +558,15 @@ const SAAVN_TOP_ARTISTS = {
 let saavnTopArtistsCache = null;
 let saavnTopArtistsCacheAt = 0;
 
+// JioSaavn serves a generic "microphone" placeholder for artists without a real
+// photo. Treat those (and empty strings) as "no image" so the client can show a
+// nicer letter/gradient fallback instead of an ugly default mic thumbnail.
+function isRealArtistImage(url) {
+  if (!url || typeof url !== 'string') return false;
+  const u = url.toLowerCase();
+  return !u.includes('default') && !u.includes('placeholder');
+}
+
 async function resolveSaavnArtist(query, retries = 2) {
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
@@ -566,17 +575,26 @@ async function resolveSaavnArtist(query, retries = 2) {
       const response = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
       if (!response.ok) throw new Error(`autocomplete failed: ${response.status}`);
       const data = await response.json();
-      const list = data?.artists?.data || data?.artists || [];
-      const first = Array.isArray(list) ? list[0] : null;
-      if (!first) return null;
-      const image = (first.image || '')
+      let list = data?.artists?.data || data?.artists || [];
+      if (!Array.isArray(list)) list = [];
+      // Prefer entries that are genuinely artists (not song/album credits).
+      const artistsOnly = list.filter(
+        (x) => !x?.type || x.type === 'artist'
+      );
+      const candidates = artistsOnly.length ? artistsOnly : list;
+      // Pick the candidate whose name best matches the query.
+      const qLower = query.toLowerCase();
+      const best =
+        candidates.find((x) => (x.title || x.name || '').toLowerCase() === qLower) ||
+        candidates.find((x) => (x.title || x.name || '').toLowerCase().includes(qLower.split(' ')[0])) ||
+        candidates[0] ||
+        null;
+      if (!best) return null;
+      const rawImage = (best.image || '')
         .replace('150x150', '500x500')
         .replace('50x50', '500x500');
-      return {
-        id: first.id || null,
-        name: decodeEntities(first.title || first.name || query),
-        image: image || null
-      };
+      const image = isRealArtistImage(rawImage) ? rawImage : null;
+      return { id: best.id || null, image };
     } catch (err) {
       if (attempt === retries) {
         console.error(`Saavn artist resolve error (${query}):`, err.message);
