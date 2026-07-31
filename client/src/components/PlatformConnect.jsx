@@ -247,7 +247,7 @@ function PlatformConnect({ spotify, youtube, audius, saavn, soundcloud, roomId, 
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
                 <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>⭐ Top Artists</h4>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  {['telugu', 'hindi', 'english', 'tamil'].map((lang) => (
+                  {['telugu', 'hindi', 'tamil'].map((lang) => (
                     <button
                       key={lang}
                       onClick={() => setArtistLang(lang)}

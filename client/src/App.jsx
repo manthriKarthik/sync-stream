@@ -28,9 +28,14 @@ function App() {
   const userIdRef = useRef(getPersistentUserId());
   // Remembers the current room so we can auto-rejoin after a reconnect.
   const sessionRef = useRef(null); // { roomId, username }
+  // True only while a user-initiated join/create is in flight, so we can tell a
+  // manual "wrong code" from a silent auto-rejoin that failed (e.g. the server
+  // restarted and wiped the in-memory room).
+  const manualJoinRef = useRef(false);
 
   const { socket, connected } = useSocket({
     onRoomState: (state) => {
+      manualJoinRef.current = false;
       setRoomState(state);
       setView('room');
       sessionRef.current = {
@@ -42,6 +47,16 @@ function App() {
       sessionRef.current = { roomId: room.id, username: sessionRef.current?.username };
     },
     onError: (error) => {
+      // An auto-rejoin that fails (room no longer exists on the server) should
+      // NOT show the scary "check the code" popup — the user did nothing wrong.
+      // Quietly send them back to the landing page instead.
+      if (error?.code === 'ROOM_NOT_FOUND' && !manualJoinRef.current) {
+        sessionRef.current = null;
+        setRoomState(null);
+        setView('landing');
+        return;
+      }
+      manualJoinRef.current = false;
       alert(error.message);
     }
   });
@@ -68,6 +83,7 @@ function App() {
 
   const handleJoinRoom = (roomId, user) => {
     setUsername(user);
+    manualJoinRef.current = true;
     sessionRef.current = { roomId: roomId?.trim()?.toLowerCase(), username: user };
     socket.emit('room:join', { roomId, username: user, userId: userIdRef.current });
   };

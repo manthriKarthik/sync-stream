@@ -543,11 +543,6 @@ const SAAVN_TOP_ARTISTS = {
     { q: 'A. R. Rahman', role: 'Composer' },
     { q: 'Pritam', role: 'Composer' }
   ],
-  english: [
-    { q: 'Ed Sheeran', role: 'Artist' },
-    { q: 'The Weeknd', role: 'Artist' },
-    { q: 'Taylor Swift', role: 'Artist' }
-  ],
   tamil: [
     { q: 'Anirudh Ravichander', role: 'Composer' },
     { q: 'A. R. Rahman', role: 'Composer' },
@@ -569,20 +564,76 @@ function isRealArtistImage(url) {
   return !u.includes('default') && !u.includes('placeholder');
 }
 
+// Loose name comparison so we never attach a grossly-wrong photo to an artist.
+function normalizeArtistName(s) {
+  return (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+function artistNamesMatch(a, b) {
+  const x = normalizeArtistName(a);
+  const y = normalizeArtistName(b);
+  if (!x || !y) return false;
+  return x === y || x.includes(y) || y.includes(x);
+}
+
+// Image hosts we are willing to proxy (prevents this endpoint from being an
+// open SSRF proxy to arbitrary URLs).
+const ARTIST_IMAGE_HOSTS = [
+  'cdn-images.dzcdn.net',
+  'e-cdns-images.dzcdn.net',
+  'e-cdn-images.dzcdn.net'
+];
+
+// Proxy artist images through our own origin so they always load on the
+// client's device/network (some CDNs are hotlink- or region-blocked).
+app.get('/api/artist-image', async (req, res) => {
+  const raw = req.query.u;
+  if (!raw || typeof raw !== 'string') return res.status(400).end('missing u');
+  let target;
+  try {
+    target = new URL(raw);
+  } catch {
+    return res.status(400).end('bad url');
+  }
+  const hostOk = ARTIST_IMAGE_HOSTS.some(
+    (h) => target.hostname === h || target.hostname.endsWith('.' + h)
+  );
+  if (target.protocol !== 'https:' || !hostOk) {
+    return res.status(403).end('host not allowed');
+  }
+  try {
+    const upstream = await fetch(target.href, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+    if (!upstream.ok || !upstream.body) return res.status(502).end('fetch failed');
+    res.setHeader('Content-Type', upstream.headers.get('content-type') || 'image/jpeg');
+    res.setHeader('Cache-Control', 'public, max-age=604800');
+    Readable.fromWeb(upstream.body).pipe(res);
+  } catch (err) {
+    console.error('Artist image proxy error:', err.message);
+    if (!res.headersSent) res.status(502).end('proxy error');
+  }
+});
+
 // Resolve an artist photo dynamically. Deezer's public search API needs no key,
 // is CORS/proxy friendly, and returns high-res artist portraits — so the top
-// artists can change freely and photos keep resolving automatically.
+// artists can change freely and photos keep resolving automatically. The image
+// URL is returned as a same-origin proxy path so it always loads client-side.
 async function resolveSaavnArtist(query, retries = 2) {
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
-      const url = `https://api.deezer.com/search/artist?limit=1&q=${encodeURIComponent(query)}`;
+      const url = `https://api.deezer.com/search/artist?limit=5&q=${encodeURIComponent(query)}`;
       const response = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
       if (!response.ok) throw new Error(`deezer search failed: ${response.status}`);
       const data = await response.json();
-      const best = Array.isArray(data?.data) ? data.data[0] : null;
+      const list = Array.isArray(data?.data) ? data.data : [];
+      // Prefer an entry whose name actually matches the query.
+      const best =
+        list.find((x) => artistNamesMatch(query, x?.name)) || list[0] || null;
       if (!best) return null;
+      // Guard against a completely unrelated top result.
+      if (!artistNamesMatch(query, best.name)) return { id: null, image: null };
       const rawImage = best.picture_xl || best.picture_big || best.picture_medium || '';
-      const image = isRealArtistImage(rawImage) ? rawImage : null;
+      const image = isRealArtistImage(rawImage)
+        ? `/api/artist-image?u=${encodeURIComponent(rawImage)}`
+        : null;
       return { id: best.id ? String(best.id) : null, image };
     } catch (err) {
       if (attempt === retries) {
@@ -834,7 +885,10 @@ io.on('connection', (socket) => {
     const normalizedId = roomId?.trim()?.toLowerCase();
     const room = roomManager.getRoom(normalizedId);
     if (!room) {
-      socket.emit('error', { message: 'Room not found. Check the code and try again.' });
+      socket.emit('error', {
+        code: 'ROOM_NOT_FOUND',
+        message: 'Room not found. Check the code and try again.'
+      });
       return;
     }
 
