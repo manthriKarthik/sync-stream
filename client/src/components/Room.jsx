@@ -351,7 +351,11 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave }) {
         }
       } else if (track.platform === 'spotify' && spotify.isConnected) {
         if (state.playing) {
-          spotify.playTrack(track.uri, computePlatformPosition(state) * 1000);
+          // Skip if this device just started the track from a tap gesture —
+          // re-issuing playTrack now would restart it right after it began.
+          if (!justStartedInGesture(track.uri)) {
+            spotify.playTrack(track.uri, computePlatformPosition(state) * 1000);
+          }
         } else {
           spotify.pause();
         }
@@ -382,7 +386,9 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave }) {
         youtube.playTrack(track.uri, computePlatformPosition(state));
       }
     } else if (track.platform === 'spotify' && spotify.isConnected) {
-      spotify.playTrack(track.uri, computePlatformPosition(state) * 1000);
+      if (!justStartedInGesture(track.uri)) {
+        spotify.playTrack(track.uri, computePlatformPosition(state) * 1000);
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [queue, currentTrackIndex, spotify.isConnected]);
@@ -628,6 +634,14 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave }) {
     if (track.platform === 'youtube') {
       recentGestureLoadRef.current = { videoId: track.uri, at: Date.now() };
       youtube.playTrack(track.uri, 0, true);
+    } else if (track.platform === 'spotify') {
+      // Start Spotify on THIS device inside the tap gesture so the SDK audio
+      // element produces sound on mobile (Android/iOS require playback tied to
+      // a user interaction). Mark activated so the green prompt disappears.
+      recentGestureLoadRef.current = { videoId: track.uri, at: Date.now() };
+      setSpotifyActivated(true);
+      spotify.activate();
+      spotify.playTrack(track.uri, 0);
     } else if (isSharedTrack) {
       // Shared <audio> tracks (Saavn / Audius / SoundCloud / upload):
       // load + play the new source inside this gesture. Set lastLoadedUrlRef so
@@ -756,6 +770,12 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave }) {
     const track = queue[currentTrackIndex];
     if (track?.platform === 'youtube' && ps?.playing) {
       youtube.playTrack(track.uri, computePlatformPosition(ps), true);
+    } else if (track?.platform === 'spotify' && ps?.playing && spotify.isConnected) {
+      // Start Spotify inside this gesture so the SDK produces sound on mobile,
+      // and mark it activated so the separate green prompt never appears.
+      setSpotifyActivated(true);
+      recentGestureLoadRef.current = { videoId: track.uri, at: Date.now() };
+      spotify.playTrack(track.uri, computePlatformPosition(ps) * 1000);
     } else if (track?.url && track.platform !== 'spotify' && ps?.playing) {
       // Shared audio (Saavn / Audius / uploads): start it within this gesture
       // so mobile listeners actually hear it. Seek to the synced position first
@@ -785,6 +805,19 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave }) {
   const handleActivateSpotify = () => {
     spotify.activate();
     setSpotifyActivated(true);
+    // Actually (re)start the current Spotify track on THIS device within the
+    // gesture. activateElement() only unlocks the audio element; without a fresh
+    // playTrack the already-in-progress song stays silent here (timer moves but
+    // no sound), which is the exact bug this prompt was failing to fix.
+    const ps = platformStateRef.current || roomState?.playbackState;
+    const track = queue[ps?.trackIndex ?? currentTrackIndex];
+    if (track?.platform === 'spotify' && ps?.playing && spotify.isConnected) {
+      recentGestureLoadRef.current = { videoId: track.uri, at: Date.now() };
+      spotify.playTrack(track.uri, computePlatformPosition(ps) * 1000);
+    }
+    if (socket && roomState?.id) {
+      socket.emit('playback:request-sync', { roomId: roomState.id });
+    }
   };
 
   // Fallback: if the browser hard-blocks autoplay even after audio is enabled,
