@@ -1,0 +1,114 @@
+.studio-entry {
+  --accent: #a5f36b;
+  --accent-hover: #c4ff99;
+  --accent-glow: #a5f36b20;
+  --text-secondary: #c1c6ce;
+  --text-muted: #9ca4af;
+  width: 100%; padding: 0; background: #111315;
+}
+.studio-entry .entry-header { min-height: 80px; width: min(1320px, 100%); padding: 0 48px; margin: auto; border: 0; }
+.studio-entry .studio-brand { font-size: 28px; }
+.studio-entry .studio-brand svg { color: #82e8ee; }
+.studio-entry .entry-content { padding: 0; }
+.artist-showcase { position: relative; }
+.artist-stage { height: 460px; position: relative; isolation: isolate; background: #22282c; overflow: hidden; touch-action: pan-y; }
+.artist-photos, .artist-photo, .stage-shade { position: absolute; inset: 0; }
+.artist-photo { opacity: 0; transition: opacity 1.2s cubic-bezier(.22, 1, .36, 1); }
+.artist-photo.is-active { opacity: 1; }
+.artist-photo img { width: 100%; height: 100%; object-fit: cover; object-position: center 30%; transform: scale(1.06); }
+.artist-photo.is-active img { animation: artist-drift 8s linear both; animation-play-state: paused; }
+.artist-stage.is-running .artist-photo.is-active img { animation-play-state: running; }
+.artist-photo[data-artist="ed-sheeran"] img { object-position: center 76%; }
+.artist-photo[data-artist="anirudh-ravichander"] img { object-fit: contain; object-position: 70% center; background: #071925; }
+.artist-photo[data-artist="the-weeknd"] img { object-fit: contain; object-position: 70% center; background: #26211a; }
+.artist-photo[data-artist="a-r-rahman"] img { object-position: center 85%; }
+.artist-photo[data-artist="shreya-ghoshal"] img,
+.artist-photo[data-artist="bruno-mars"] img,
+.artist-photo[data-artist="billie-eilish"] img,
+.artist-photo[data-artist="arijit-singh"] img,
+.artist-photo[data-artist="harry-styles"] img { object-fit: contain; object-position: 70% center; background: #16191d; }
+.artist-photo-fallback { height: 100%; display: grid; place-items: center; color: var(--artist-color); background: #26323b; }
+.stage-shade { background: linear-gradient(90deg, #080c10dc 0%, #080c1050 42%, transparent 72%), linear-gradient(0deg, #080c10eb, transparent 50%); pointer-events: none; }
+.studio-entry .entry-title { position: absolute; left: max(48px, calc((100% - 1224px) / 2)); top: 62px; max-width: 460px; animation: spotlight-arrive 1s cubic-bezier(.22,1,.36,1) both; }
+.studio-entry .entry-title .eyebrow { color: #d0f9ed; font-size: 10px; }
+.live-dot { width: 6px; height: 6px; background: #a5f36b; border-radius: 50%; }
+.studio-entry .entry-title h1 { font-size: 112px; line-height: 1; margin: 20px 0 14px; color: #fff; }
+.studio-entry .entry-title h1 span { color: #ff867c; }
+.studio-entry .entry-title p { color: #e4e7ea; max-width: 300px; font-size: 22px; line-height: 1.45; }
+.stage-link { display: inline-flex; align-items: center; gap: 12px; color: #c7f8f5; font-size: 13px; text-decoration: none; margin-top: 25px; border-bottom: 1px solid #c7f8f566; padding-bottom: 9px; }
+.stage-link svg { transition: transform .45s cubic-bezier(.22,1,.36,1); }
+.stage-link:hover svg { transform: translateX(5px); }
+.artist-caption { position: absolute; bottom: 66px; right: max(48px, calc((100% - 1224px) / 2)); text-align: right; max-width: 44%; }
+.spotlight-label { display: flex; justify-content: flex-end; align-items: center; gap: 8px; font-size: 10px; color: var(--artist-color); }
+.artist-caption h2 { font: 500 42px/1.12 'Space Grotesk', sans-serif; color: #fff; margin: 12px 0 8px; overflow-wrap: anywhere; animation: spotlight-arrive .7s cubic-bezier(.22,1,.36,1) both; }
+.artist-caption > span:last-child { color: #d8dce0; font-size: 13px; }
+.stage-controls { position: absolute; right: max(48px, calc((100% - 1224px) / 2)); bottom: 16px; display: flex; align-items: center; gap: 8px; }
+.stage-controls button { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; color: #fff; background: #ffffff14; border: 1px solid #ffffff40; backdrop-filter: blur(12px); transition: background .25s, transform .35s; }
+.stage-controls button:hover { background: #ffffff30; transform: translateY(-2px); }
+.stage-controls button:disabled { opacity: .45; }
+.stage-counter { font-size: 12px; font-variant-numeric: tabular-nums; color: #fff; margin-right: 12px; }
+.stage-counter span { color: #a5adb6; }
+.stage-progress { position: absolute; bottom: 0; left: 0; height: 3px; width: 100%; transform-origin: left; background: var(--artist-color); transform: scaleX(0); }
+.stage-progress.is-running { animation: artist-progress 6.5s linear both; }
+.artist-rail { display: flex; gap: 18px; padding: 22px max(24px, calc((100% - 1224px) / 2)); overflow-x: auto; scrollbar-width: thin; scrollbar-color: #515b63 transparent; background: linear-gradient(110deg, #1a2529, #161719 55%, #261c20); }
+.artist-choice { flex: 0 0 78px; width: 78px; background: none; color: #aeb6bf; display: flex; align-items: center; flex-direction: column; gap: 10px; }
+.artist-choice img { width: 60px; height: 60px; border-radius: 50%; object-fit: cover; object-position: center 25%; outline: 2px solid transparent; outline-offset: 4px; filter: saturate(.6); transition: outline-color .4s, filter .4s, transform .5s cubic-bezier(.22,1,.36,1); }
+.artist-choice span { font-size: 11px; line-height: 1.35; min-height: 30px; }
+.artist-choice:hover img { transform: translateY(-4px); filter: saturate(1); }
+.artist-choice.is-active { color: #fff; }
+.artist-choice.is-active img { outline-color: var(--artist-color); filter: saturate(1); }
+.artist-credits { padding: 10px 24px; font-size: 10px; color: #aab1ba; background: #141719; }
+.artist-credits summary { cursor: pointer; width: fit-content; margin-left: auto; }
+.artist-credits ul { list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin: 18px 0; }
+.artist-credits a { color: #c2dfeb; }
+.artist-credits li { overflow-wrap: anywhere; }
+.studio-entry .entry-workspace { display: block; margin: 0 auto; padding: 28px 48px 42px; width: min(1320px, 100%); }
+.room-access-heading { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-bottom: 22px; }
+.room-access-heading .eyebrow { color: #82e8ee; }
+.room-access-heading h2 { font: 500 23px 'Space Grotesk', sans-serif; }
+.studio-entry .entry-tabs { width: min(380px, 100%); }
+.studio-entry .entry-form { display: grid; grid-template-columns: 1fr 1fr minmax(180px,.7fr); align-items: end; gap: 18px; padding-top: 20px; }
+.studio-entry .entry-form .form-group { margin: 0; }
+.studio-entry .entry-form .form-error { grid-column: 1 / -1; margin: 0; order: 4; }
+.studio-entry .input { background: #202428; border-color: #444c54; border-radius: 8px; transition: background .35s, border-color .35s, box-shadow .35s; }
+.studio-entry .input:focus { background: #252d31; }
+.studio-entry .entry-submit { color: #15210e; border-radius: 8px; min-height: 50px; transition: transform .45s cubic-bezier(.22,1,.36,1), background .35s, box-shadow .35s; }
+.studio-entry .entry-submit:not(:disabled):hover { box-shadow: 0 8px 28px #a5f36b22; transform: translateY(-2px); }
+.studio-entry .entry-footer { padding: 22px 48px; width: min(1320px, 100%); margin: auto; }
+@keyframes artist-drift { from { transform: scale(1.02); } to { transform: scale(1.09); } }
+@keyframes artist-progress { to { transform: scaleX(1); } }
+@keyframes spotlight-arrive { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+@media (min-width: 1500px) { .artist-stage { height: 500px; } }
+@media (max-width: 768px) {
+  .studio-entry .entry-header { min-height: 68px; padding: 0 22px; }
+  .studio-entry .studio-brand { font-size: 24px; }
+  .artist-stage { height: 390px; }
+  .studio-entry .entry-title { left: 24px; top: 30px; max-width: 270px; }
+  .studio-entry .entry-title h1 { font-size: 68px; margin-top: 14px; }
+  .studio-entry .entry-title p { font-size: 16px; max-width: 210px; }
+  .studio-entry .entry-title .eyebrow { font-size: 9px; }
+  .stage-link { font-size: 11px; margin-top: 14px; }
+  .artist-caption { left: 24px; bottom: 32px; right: auto; text-align: left; max-width: calc(100% - 168px); }
+  .spotlight-label { justify-content: flex-start; font-size: 8px; }
+  .artist-caption h2 { font-size: 25px; margin: 8px 0 6px; }
+  .artist-caption > span:last-child { font-size: 11px; }
+  .stage-controls { right: 16px; bottom: 32px; gap: 6px; flex-wrap: wrap; width: 114px; }
+  .stage-controls button { width: 32px; height: 32px; }
+  .stage-counter { width: 100%; text-align: right; margin: 0 6px 6px 0; font-size: 10px; }
+  .artist-rail { gap: 12px; padding: 18px 24px 12px; }
+  .artist-choice { flex-basis: 64px; width: 64px; }
+  .artist-choice img { width: 48px; height: 48px; }
+  .artist-choice span { font-size: 10px; }
+  .artist-credits { padding: 8px 24px; }
+  .studio-entry .entry-workspace { padding: 22px 24px 30px; }
+  .room-access-heading { flex-direction: column; align-items: flex-start; gap: 10px; }
+  .room-access-heading h2 { font-size: 20px; }
+  .room-access-heading .eyebrow { font-size: 9px; }
+  .studio-entry .entry-form { grid-template-columns: 1fr; gap: 18px; }
+  .studio-entry .entry-form .form-error { order: 0; }
+  .studio-entry .entry-footer { padding: 22px 24px; }
+}
+@media (max-width: 360px) { .artist-stage { height: 370px; } .artist-caption h2 { font-size: 21px; } .studio-entry .entry-title h1 { font-size: 68px; } }
+@media (prefers-reduced-motion: reduce) {
+  .artist-showcase *, .artist-showcase *::before, .artist-showcase *::after { animation: none !important; transition: none !important; }
+}

@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react';
+import { searchProvider } from './searchProvider';
 
 /**
  * SoundCloud integration — free streaming with a huge English catalog
@@ -19,14 +20,11 @@ export function useSoundCloud() {
     if (!query) return [];
     setError(null);
     try {
-      const res = await fetch(`/api/soundcloud/search?q=${encodeURIComponent(query)}`);
-      if (!res.ok) return [];
-      const data = await res.json();
-      return data.results || [];
+      return await searchProvider('soundcloud', query);
     } catch (err) {
       console.error('SoundCloud search error:', err);
       setError('SoundCloud search failed');
-      return [];
+      throw err;
     }
   }, []);
 

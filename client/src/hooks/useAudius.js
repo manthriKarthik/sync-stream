@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react';
+import { searchProvider } from './searchProvider';
 
 /**
  * Audius integration — a free, open music streaming platform.
@@ -18,14 +19,11 @@ export function useAudius() {
     if (!query) return [];
     setError(null);
     try {
-      const res = await fetch(`/api/audius/search?q=${encodeURIComponent(query)}`);
-      if (!res.ok) return [];
-      const data = await res.json();
-      return data.results || [];
+      return await searchProvider('audius', query);
     } catch (err) {
       console.error('Audius search error:', err);
       setError('Audius search failed');
-      return [];
+      throw err;
     }
   }, []);
 

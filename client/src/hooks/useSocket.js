@@ -4,6 +4,8 @@ import { io } from 'socket.io-client';
 export function useSocket({ onRoomState, onRoomCreated, onError }) {
   const socketRef = useRef(null);
   const [connected, setConnected] = useState(false);
+  const callbacksRef = useRef({ onRoomState, onRoomCreated, onError });
+  callbacksRef.current = { onRoomState, onRoomCreated, onError };
 
   useEffect(() => {
     // Connect to the same origin serving the page (routed via Vite proxy).
@@ -20,9 +22,9 @@ export function useSocket({ onRoomState, onRoomCreated, onError }) {
     socket.on('connect', () => setConnected(true));
     socket.on('disconnect', () => setConnected(false));
 
-    socket.on('room:state', (state) => onRoomState(state));
-    socket.on('room:created', (room) => onRoomCreated(room));
-    socket.on('error', (err) => onError(err));
+    socket.on('room:state', (state) => callbacksRef.current.onRoomState(state));
+    socket.on('room:created', (room) => callbacksRef.current.onRoomCreated(room));
+    socket.on('error', (err) => callbacksRef.current.onError(err));
 
     return () => {
       socket.disconnect();

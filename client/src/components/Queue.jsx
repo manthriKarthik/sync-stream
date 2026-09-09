@@ -18,6 +18,14 @@ function Queue({ queue, currentIndex, onSelect, onRemove, canControl }) {
           key={track.id}
           className={`queue-item ${index === currentIndex ? 'active' : ''}`}
           onClick={() => canControl && onSelect(index)}
+          tabIndex={canControl ? 0 : undefined}
+          onKeyDown={event => {
+            if (event.target !== event.currentTarget) return;
+            if (canControl && (event.key === 'Enter' || event.key === ' ')) {
+              event.preventDefault();
+              onSelect(index);
+            }
+          }}
         >
           <span className="track-num">
             {index === currentIndex ? (
@@ -54,6 +62,7 @@ function Queue({ queue, currentIndex, onSelect, onRemove, canControl }) {
                 onRemove(track.id);
               }}
               title="Remove"
+              aria-label={`Remove ${track.name}`}
             >
               ✕
             </button>

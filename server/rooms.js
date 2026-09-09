@@ -19,6 +19,7 @@ export class RoomManager {
       members: {
         [hostSocketId]: { username: hostUsername, userId: uid, joinedAt: Date.now(), canControl: true }
       },
+      memberPermissions: new Map(),
       queue: [],
       playbackState: {
         playing: false,
@@ -67,10 +68,12 @@ export class RoomManager {
     const uid = userId || socketId;
     // Drop any stale entry for the same persistent user (a reconnect arrives
     // with a NEW socket id) and carry over its control permission.
-    let priorControl = false;
+    let priorControl = !!room.members[socketId]?.canControl || !!room.memberPermissions.get(uid);
+    let joinedAt = room.members[socketId]?.joinedAt ?? Date.now();
     for (const [sid, m] of Object.entries(room.members)) {
       if (m.userId === uid && sid !== socketId) {
         priorControl = priorControl || !!m.canControl;
+        joinedAt = m.joinedAt;
         delete room.members[sid];
       }
     }
@@ -78,7 +81,7 @@ export class RoomManager {
     room.members[socketId] = {
       username,
       userId: uid,
-      joinedAt: Date.now(),
+      joinedAt,
       canControl: isHostUser ? true : priorControl
     };
     // Reclaim host: repoint the room's current host socket at the reconnected
@@ -92,6 +95,7 @@ export class RoomManager {
     const room = this.rooms.get(roomId);
     if (!room || !room.members[memberId]) return false;
     room.members[memberId].canControl = !!allowed;
+    room.memberPermissions.set(room.members[memberId].userId, !!allowed);
     return true;
   }
 

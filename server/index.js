@@ -41,40 +41,7 @@ app.use(cors());
 app.use(express.json());
 
 // Serve audio files with proper range request support (required by iOS Safari)
-app.use('/uploads', (req, res, next) => {
-  const filePath = path.join(__dirname, 'uploads', req.path);
-  if (!fs.existsSync(filePath)) return res.status(404).end();
-
-  const stat = fs.statSync(filePath);
-  const fileSize = stat.size;
-  const range = req.headers.range;
-
-  if (range) {
-    const parts = range.replace(/bytes=/, '').split('-');
-    const start = parseInt(parts[0], 10);
-    const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
-    const chunkSize = end - start + 1;
-
-    res.writeHead(206, {
-      'Content-Range': `bytes ${start}-${end}/${fileSize}`,
-      'Accept-Ranges': 'bytes',
-      'Content-Length': chunkSize,
-      'Content-Type': 'audio/mpeg',
-      'Cache-Control': 'public, max-age=86400'
-    });
-
-    fs.createReadStream(filePath, { start, end }).pipe(res);
-  } else {
-    res.writeHead(200, {
-      'Content-Length': fileSize,
-      'Content-Type': 'audio/mpeg',
-      'Accept-Ranges': 'bytes',
-      'Cache-Control': 'public, max-age=86400'
-    });
-
-    fs.createReadStream(filePath).pipe(res);
-  }
-});
+app.use('/uploads', express.static(uploadsDir, { maxAge: '1d', fallthrough: false }));
 
 // File upload setup
 const storage = multer.diskStorage({
@@ -123,7 +90,14 @@ function isRoomHost(room, socketId) {
 }
 
 // REST API
-app.post('/api/upload/:roomId', upload.single('audio'), (req, res) => {
+app.post('/api/upload/:roomId', (req, res, next) => {
+  const room = roomManager.getRoom(req.params.roomId);
+  if (!room) return res.status(404).json({ error: 'Room not found' });
+  if (!room.members[req.headers['x-socket-id']]) {
+    return res.status(403).json({ error: 'Join the room before uploading music' });
+  }
+  next();
+}, upload.single('audio'), (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No file uploaded' });
   }
@@ -139,7 +113,7 @@ app.post('/api/upload/:roomId', upload.single('audio'), (req, res) => {
     name: req.file.originalname,
     url: `/uploads/${req.file.filename}`,
     duration: null,
-    addedBy: req.body.userId || 'unknown'
+    addedBy: room.members[req.headers['x-socket-id']]?.username || 'Listener'
   };
 
   room.queue.push(track);
@@ -323,7 +297,7 @@ app.get('/api/youtube/search', async (req, res) => {
     res.json({ results });
   } catch (err) {
     console.error('YouTube search error:', err.message);
-    res.json({ results: [] });
+    res.status(502).json({ error: 'YouTube search is unavailable. Please try again.' });
   }
 });
 
@@ -384,7 +358,7 @@ app.get('/api/audius/search', async (req, res) => {
     console.error('Audius search error:', err.message);
     // Retry once with a fresh host on next call
     audiusHostCache = null;
-    res.json({ results: [] });
+    res.status(502).json({ error: 'Audius search is unavailable. Please try again.' });
   }
 });
 
@@ -491,7 +465,7 @@ app.get('/api/saavn/search', async (req, res) => {
     res.json({ results });
   } catch (err) {
     console.error('Saavn search error:', err.message);
-    res.json({ results: [] });
+    res.status(502).json({ error: 'Saavn search is unavailable. Please try again.' });
   }
 });
 
@@ -604,7 +578,7 @@ app.get('/api/soundcloud/search', async (req, res) => {
     res.json({ results: results.filter(Boolean) });
   } catch (err) {
     console.error('SoundCloud search error:', err.message);
-    res.json({ results: [] });
+    res.status(502).json({ error: 'SoundCloud search is unavailable. Please try again.' });
   }
 });
 
@@ -702,6 +676,16 @@ app.get('/api/gaana/search', async (req, res) => {
 io.on('connection', (socket) => {
   console.log(`Client connected: ${socket.id}`);
 
+  socket.use(([event, payload], next) => {
+    if (event === 'clock:ping') return next();
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)
+      || ('roomId' in payload && typeof payload.roomId !== 'string')) {
+      socket.emit('error', { message: 'Invalid request' });
+      return;
+    }
+    next();
+  });
+
   // Clock synchronization
   socket.on('clock:ping', (clientTime) => {
     socket.emit('clock:pong', {
@@ -712,6 +696,12 @@ io.on('connection', (socket) => {
 
   // Room management
   socket.on('room:create', ({ username, roomName, userId }) => {
+    if (typeof username !== 'string' || !username.trim() || username.length > 20
+      || (roomName != null && (typeof roomName !== 'string' || roomName.length > 30))
+      || (userId != null && typeof userId !== 'string')) {
+      socket.emit('error', { message: 'Enter a valid name and room name' });
+      return;
+    }
     const room = roomManager.createRoom(roomName, socket.id, username, userId);
     socket.join(room.id);
     socket.emit('room:created', room);
@@ -719,6 +709,11 @@ io.on('connection', (socket) => {
   });
 
   socket.on('room:join', ({ roomId, username, userId }) => {
+    if (typeof username !== 'string' || !username.trim() || username.length > 20
+      || (userId != null && typeof userId !== 'string')) {
+      socket.emit('error', { message: 'Enter a valid name' });
+      return;
+    }
     const normalizedId = roomId?.trim()?.toLowerCase();
     const room = roomManager.getRoom(normalizedId);
     if (!room) {
@@ -730,7 +725,10 @@ io.on('connection', (socket) => {
     }
 
     // A (re)join cancels any pending host-reassignment grace timer.
-    if (room._hostGraceTimer) { clearTimeout(room._hostGraceTimer); room._hostGraceTimer = null; }
+    if (room._hostGraceTimer && room.hostUserId === userId) {
+      clearTimeout(room._hostGraceTimer);
+      room._hostGraceTimer = null;
+    }
     // ...and any pending empty-room deletion timer, so a returning member keeps
     // the room alive.
     if (room._emptyTimer) { clearTimeout(room._emptyTimer); room._emptyTimer = null; }
@@ -748,8 +746,8 @@ io.on('connection', (socket) => {
     // listener so they can catch up mid-song (with a recalculated position).
     if (room.playbackState && room.playbackState.playing) {
       const now = Date.now();
-      const elapsed = (now - room.playbackState.startedAt) / 1000;
       const syncTime = now + 200; // coordination buffer
+      const elapsed = (syncTime - room.playbackState.startedAt) / 1000;
       socket.emit('playback:sync', {
         ...room.playbackState,
         position: (room.playbackState.position || 0) + Math.max(0, elapsed),
@@ -774,6 +772,8 @@ io.on('connection', (socket) => {
       return;
     }
 
+    if (!Number.isInteger(trackIndex) || !room.queue[trackIndex]
+      || (position != null && (!Number.isFinite(position) || position < 0))) return;
     const syncTime = Date.now() + 200; // 200ms coordination buffer for remote users
     room.playbackState = {
       playing: true,
@@ -799,7 +799,8 @@ io.on('connection', (socket) => {
     }
 
     const now = Date.now();
-    const elapsed = (now - room.playbackState.startedAt) / 1000;
+    const elapsed = room.playbackState.playing
+      ? Math.max(0, (now - room.playbackState.startedAt) / 1000) : 0;
     room.playbackState = {
       ...room.playbackState,
       playing: false,
@@ -815,6 +816,7 @@ io.on('connection', (socket) => {
     if (!room) return;
 
     if (!memberCanControl(room, socket.id)) return;
+    if (!Number.isFinite(position) || position < 0 || !room.queue.length) return;
 
     const syncTime = Date.now() + 100;
     room.playbackState = {
@@ -854,17 +856,18 @@ io.on('connection', (socket) => {
   socket.on('playback:request-sync', ({ roomId }) => {
     const normalizedId = roomId?.trim()?.toLowerCase();
     const room = roomManager.getRoom(normalizedId);
-    if (!room || !room.playbackState) return;
+    if (!room || !room.members[socket.id] || !room.playbackState) return;
     const ps = room.playbackState;
     if (!ps.playing) {
-      socket.emit('playback:sync', { ...ps });
+      socket.emit('playback:sync', { ...ps, snapshot: true });
       return;
     }
     const now = Date.now();
-    const elapsed = (now - (ps.startedAt || now)) / 1000;
     const syncTime = now + 200;
+    const elapsed = (syncTime - (ps.startedAt || now)) / 1000;
     socket.emit('playback:sync', {
       ...ps,
+      snapshot: true,
       position: (ps.position || 0) + Math.max(0, elapsed),
       startedAt: syncTime,
       syncTime
@@ -874,10 +877,16 @@ io.on('connection', (socket) => {
   // Queue management
   socket.on('queue:add-platform-track', ({ roomId, track }) => {
     const room = roomManager.getRoom(roomId);
-    if (!room) return;
+    if (!room || !room.members[socket.id]) return;
+    if (!track || typeof track.name !== 'string' || !track.name.trim()
+      || !['youtube', 'spotify', 'audius', 'saavn', 'soundcloud', 'gaana'].includes(track.platform)
+      || (track.url != null && (typeof track.url !== 'string'
+        || (!/^https?:\/\//i.test(track.url)
+          && !(track.platform === 'saavn' && track.url.startsWith('/api/saavn/stream?')))))
+      || (track.uri != null && typeof track.uri !== 'string')) return;
     // Add streaming platform track to queue
     room.queue.push({
-      id: track.id || uuidv4(),
+      id: uuidv4(),
       name: track.name,
       artist: track.artist,
       album: track.album,
@@ -886,26 +895,31 @@ io.on('connection', (socket) => {
       url: track.url || null, // Audius provides a direct stream URL; Spotify/YT don't
       duration: track.duration,
       platform: track.platform,
-      addedBy: track.addedBy || 'unknown'
+      addedBy: room.members[socket.id].username
     });
     io.to(roomId).emit('queue:updated', room.queue);
     // Notify everyone (a small pop-up) that a song was added to the queue.
     io.to(roomId).emit('queue:song-added', {
       name: track.name,
-      addedBy: track.addedBy || 'Someone'
+      addedBy: room.members[socket.id].username
     });
   });
 
   socket.on('queue:reorder', ({ roomId, queue }) => {
     const room = roomManager.getRoom(roomId);
-    if (!room) return;
-    room.queue = queue;
+    if (!room || !memberCanControl(room, socket.id) || !Array.isArray(queue)) return;
+    const tracks = new Map(room.queue.map(track => [track.id, track]));
+    if (queue.length !== tracks.size || new Set(queue.map(track => track?.id)).size !== tracks.size
+      || queue.some(track => !tracks.has(track?.id))) return;
+    const activeId = room.queue[room.playbackState.trackIndex]?.id;
+    room.queue = queue.map(track => tracks.get(track.id));
+    room.playbackState.trackIndex = Math.max(0, room.queue.findIndex(track => track.id === activeId));
     io.to(roomId).emit('queue:updated', room.queue);
   });
 
   socket.on('queue:remove', ({ roomId, trackId }) => {
     const room = roomManager.getRoom(roomId);
-    if (!room) return;
+    if (!room || !memberCanControl(room, socket.id)) return;
     const removedIndex = room.queue.findIndex(t => t.id === trackId);
     if (removedIndex === -1) return;
     room.queue = room.queue.filter(t => t.id !== trackId);
@@ -926,6 +940,10 @@ io.on('connection', (socket) => {
       if (room.queue.length === 0) {
         ps.playing = false;
         ps.position = 0;
+        ps.trackIndex = 0;
+        ps.startedAt = null;
+        ps.updatedAt = Date.now();
+        io.to(roomId).emit('playback:sync', { ...ps });
         return;
       }
       ps.trackIndex = Math.min(ps.trackIndex, room.queue.length - 1);
@@ -945,6 +963,7 @@ io.on('connection', (socket) => {
   socket.on('room:set-mode', ({ roomId, mode }) => {
     const room = roomManager.getRoom(roomId);
     if (!room || !isRoomHost(room, socket.id)) return;
+    if (!['host', 'collaborative'].includes(mode)) return;
     room.mode = mode;
     io.to(roomId).emit('room:mode-changed', mode);
   });
@@ -982,13 +1001,14 @@ io.on('connection', (socket) => {
   socket.on('chat:send', ({ roomId, message }) => {
     const room = roomManager.getRoom(roomId);
     if (!room || !room.members[socket.id]) return;
+    if (typeof message !== 'string' || !message.trim() || message.length > 2000) return;
 
     const member = room.members[socket.id];
     io.to(roomId).emit('chat:message', {
       // Persistent userId so "my message" alignment survives reconnects.
       userId: member.userId,
       username: member.username,
-      message,
+      message: message.trim(),
       timestamp: Date.now()
     });
   });
@@ -1076,6 +1096,12 @@ function handleLeaveRoom(socket, roomId, isDisconnect = false) {
 
 const PORT = process.env.PORT || 3001;
 
+app.use((error, req, res, next) => {
+  if (res.headersSent) return next(error);
+  const status = error.code === 'LIMIT_FILE_SIZE' ? 413 : error.status || 400;
+  res.status(status).json({ error: error.message || 'Request failed' });
+});
+
 // Serve the built client (production/shared mode) with SPA fallback.
 // Run `npm run build` in the client folder to generate client/dist.
 const clientDist = path.join(__dirname, '..', 'client', 'dist');
@@ -1089,5 +1115,5 @@ app.get('*', (req, res) => {
 });
 
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`🎵 Sync-Stream server running on http://localhost:${PORT}`);
+  console.log(`🎵 Sync-Stream server running on http://localhost:${server.address().port}`);
 });

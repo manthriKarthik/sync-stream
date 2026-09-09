@@ -1,7 +1,7 @@
-import { useState, useRef, useEffect } from 'react';
+import { lazy, Suspense, useState, useRef, useEffect } from 'react';
 import { useSocket } from './hooks/useSocket';
 import Landing from './components/Landing';
-import Room from './components/Room';
+const Room = lazy(() => import('./components/Room'));
 
 // A per-browser persistent identity. Unlike socket.id (which changes on every
 // reconnect), this survives reloads/reconnects so the server can recognise the
@@ -25,6 +25,9 @@ function App() {
   const [view, setView] = useState('landing'); // 'landing' | 'room'
   const [roomState, setRoomState] = useState(null);
   const [username, setUsername] = useState('');
+  const [error, setError] = useState('');
+  const [pending, setPending] = useState(false);
+  const requestTimerRef = useRef(null);
   const userIdRef = useRef(getPersistentUserId());
   // Remembers the current room so we can auto-rejoin after a reconnect.
   const sessionRef = useRef(null); // { roomId, username }
@@ -35,6 +38,9 @@ function App() {
 
   const { socket, connected } = useSocket({
     onRoomState: (state) => {
+      clearTimeout(requestTimerRef.current);
+      setPending(false);
+      setError('');
       manualJoinRef.current = false;
       setRoomState(state);
       setView('room');
@@ -47,6 +53,8 @@ function App() {
       sessionRef.current = { roomId: room.id, username: sessionRef.current?.username };
     },
     onError: (error) => {
+      clearTimeout(requestTimerRef.current);
+      setPending(false);
       // An auto-rejoin that fails (room no longer exists on the server) should
       // NOT show the scary "check the code" popup — the user did nothing wrong.
       // Quietly send them back to the landing page instead.
@@ -56,8 +64,9 @@ function App() {
         setView('landing');
         return;
       }
+      if (manualJoinRef.current) sessionRef.current = null;
       manualJoinRef.current = false;
-      alert(error.message);
+      setError(error?.message || 'Something went wrong. Please try again.');
     }
   });
 
@@ -75,13 +84,31 @@ function App() {
     return () => socket.off('connect', onConnect);
   }, [socket]);
 
+  const beginRequest = () => {
+    if (!socket?.connected || manualJoinRef.current) return false;
+    manualJoinRef.current = true;
+    setPending(true);
+    setError('');
+    requestTimerRef.current = setTimeout(() => {
+      manualJoinRef.current = false;
+      sessionRef.current = null;
+      setPending(false);
+      setError('The connection timed out. Please try again.');
+    }, 10000);
+    return true;
+  };
+
+  useEffect(() => () => clearTimeout(requestTimerRef.current), []);
+
   const handleCreateRoom = (name, user) => {
+    if (!beginRequest()) return;
     setUsername(user);
     sessionRef.current = { username: user };
     socket.emit('room:create', { username: user, roomName: name, userId: userIdRef.current });
   };
 
   const handleJoinRoom = (roomId, user) => {
+    if (!beginRequest()) return;
     setUsername(user);
     manualJoinRef.current = true;
     sessionRef.current = { roomId: roomId?.trim()?.toLowerCase(), username: user };
@@ -104,6 +131,8 @@ function App() {
           onCreateRoom={handleCreateRoom}
           onJoinRoom={handleJoinRoom}
           connected={connected}
+          pending={pending}
+          error={error}
         />
       </div>
     );
@@ -111,7 +140,10 @@ function App() {
 
   return (
     <div className="app">
+      {error && <div className="room-notice" role="alert">{error}<button className="btn btn-secondary" onClick={() => setError('')}>Dismiss</button></div>}
+      <Suspense fallback={<p className="room-notice" role="status">Opening your room...</p>}>
       <Room
+        connected={connected}
         socket={socket}
         roomState={roomState}
         setRoomState={setRoomState}
@@ -119,6 +151,7 @@ function App() {
         userId={userIdRef.current}
         onLeave={handleLeaveRoom}
       />
+      </Suspense>
     </div>
   );
 }
