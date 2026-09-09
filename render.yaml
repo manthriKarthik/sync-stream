@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: sync-stream
+    runtime: node
+    buildCommand: npm run render-build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+    disk:
+      name: uploads
+      mountPath: /opt/render/project/src/server/uploads
+      sizeGB: 1
