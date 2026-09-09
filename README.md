@@ -46,6 +46,67 @@ npm run dev
 5. Upload music or start live capture
 6. Everyone connects their Bluetooth earbuds and listens together!
 
+## Tests And Validation
+
+### Artist Showcase
+
+The entry screen includes 12 artist spotlights with local photos, crossfades,
+slow camera motion, swipe navigation, artist selection, and pause controls.
+Automatic motion stops with the operating system's reduced-motion preference,
+when the page is hidden, or while interacting with the stage.
+
+Photo sources, authors, and licenses are recorded in `client/src/artists.json`
+and linked in the entry screen's Photo credits. The collection mixes concert
+photos with verified portraits; it does not imply artist endorsement. Images
+are cropped in the interface, and their individual licenses still apply.
+Run `node scripts/fetch-artists.mjs` to refresh assets from Wikimedia Commons.
+The refresh writes its manifest only after all downloads succeed.
+
+```bash
+npm install
+npm test
+npm run build
+npx playwright install chromium
+npm run test:e2e
+npm audit
+```
+
+The browser suite starts a local server when one is not already running. Build
+the client before running it. It covers desktop and mobile room creation/joining,
+invalid codes, uploads, actual HTML audio playback, seeking, late listeners,
+permissions, chat, host handoff, provider-search races, and 320px layouts.
+Screenshots and failure traces are written to `test-results/`.
+
+Backend tests cover membership and reconnect permissions, playback state,
+queue access checks, unique queue entries, upload validation, and HTTP ranges.
+
+### Limits
+
+- Foreground refreshes no longer restart an unchanged song. Small shared-audio
+     drift is corrected gradually; delayed background clock samples are discarded.
+     If the OS suspends audio entirely, catching up to the other listeners still
+     skips the missed interval. YouTube background playback may be restricted by
+     the browser/provider. This cannot be guaranteed away by website code.
+- Deploy the server and client together for the passive-sync protocol changes.
+     Local tests do not update or verify an existing hosted deployment.
+- Public-provider searches time out after 15 seconds and display errors for
+     upstream failures. Run `node scripts/check-providers.mjs https://your-site`
+     for a live search availability check (not an account or audible-playback test).
+     Search response time is not the same as inter-device audio latency.
+
+- Tests use generated local audio and a controlled search response. Live external
+     provider catalogs, Spotify Premium authentication, real Bluetooth timing,
+     Safari/iOS autoplay behavior, and microphone/WebRTC capture require separate
+     device/account testing. Third-party services can change or be unavailable.
+- Rooms are in memory and disappear when the server restarts. Persistent browser
+     IDs are not authentication. This remains a trusted-room prototype, not a
+     production-hardened public service; authentication, rate limits, and upload
+     retention policies are still needed for public deployment.
+- Upload API clients must send their current room-member socket ID in the
+     `x-socket-id` header. The bundled client supplies it automatically.
+- The `qs` override pins a patched version until Express's dependency range
+     includes that release. Review it when upgrading Express.
+
 ## Tech Stack
 
 | Layer | Technology | Purpose |

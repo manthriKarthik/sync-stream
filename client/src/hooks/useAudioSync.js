@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import Hls from 'hls.js';
+import { isUnchangedSnapshot, measureClockOffset, driftPlaybackRate } from './playbackSync';
 
 /**
  * Audio synchronization engine - v2 (optimized for remote/cross-network sync).
@@ -11,7 +12,8 @@ import Hls from 'hls.js';
  * - Smooth seek (avoids audible jumps for small drifts)
  */
 export function useAudioSync(socket, onEnded) {
-  const audioRef = useRef(new Audio());
+  const audioRef = useRef(null);
+  if (!audioRef.current) audioRef.current = new Audio();
   const onEndedRef = useRef(onEnded);
   onEndedRef.current = onEnded;
   const [clockOffset, setClockOffset] = useState(0);
@@ -101,6 +103,7 @@ export function useAudioSync(socket, onEnded) {
     if (!socket) return;
 
     const syncClock = () => {
+      if (document.hidden || !socket.connected) return;
       const t0 = Date.now();
       socket.emit('clock:ping', t0);
     };
@@ -108,8 +111,8 @@ export function useAudioSync(socket, onEnded) {
     const handlePong = ({ clientTime, serverTime }) => {
       const t3 = Date.now();
       const roundTrip = t3 - clientTime;
-      const oneWay = roundTrip / 2;
-      const offset = serverTime + oneWay - t3;
+      const offset = measureClockOffset(clientTime, serverTime, t3);
+      if (document.hidden || offset === null) return;
 
       setRtt(roundTrip);
 
@@ -128,13 +131,18 @@ export function useAudioSync(socket, onEnded) {
     socket.on('clock:pong', handlePong);
 
     // Burst 5 pings at start for fast initial sync, then every 3s
-    for (let i = 0; i < 5; i++) {
-      setTimeout(syncClock, i * 200);
-    }
+    const burstTimers = Array.from({ length: 5 }, (_, index) => setTimeout(syncClock, index * 200));
     syncIntervalRef.current = setInterval(syncClock, 3000);
+    const handleVisibility = () => {
+      audioRef.current.playbackRate = 1;
+      if (!document.hidden) syncClock();
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
 
     return () => {
       socket.off('clock:pong', handlePong);
+      burstTimers.forEach(clearTimeout);
+      document.removeEventListener('visibilitychange', handleVisibility);
       if (syncIntervalRef.current) clearInterval(syncIntervalRef.current);
     };
   }, [socket]);
@@ -170,8 +178,8 @@ export function useAudioSync(socket, onEnded) {
       if (Date.now() - recentLoadRef.current < 3500) return;
 
       const syncedNow = Date.now() + clockOffset;
-      const elapsed = (syncedNow - state.syncTime) / 1000;
-      const expectedPosition = state.position + elapsed;
+      const elapsed = Math.max(0, (syncedNow - (state.syncTime ?? state.startedAt ?? syncedNow)) / 1000);
+      const expectedPosition = Math.min(Number.isFinite(audio.duration) ? audio.duration : Infinity, state.position + elapsed);
       const actualPosition = audio.currentTime;
       const drift = expectedPosition - actualPosition;
       const absDrift = Math.abs(drift);
@@ -187,14 +195,14 @@ export function useAudioSync(socket, onEnded) {
 
       // Small/medium drift: nudge the playback rate to converge smoothly with
       // NO audible gap.
-      if (absDrift > 0.08 && absDrift < 1.0) {
-        audio.playbackRate = drift > 0 ? 1.03 : 0.97;
-        setTimeout(() => { audio.playbackRate = 1.0; }, 1200);
+      if (absDrift < 2.5) {
+        audio.playbackRate = driftPlaybackRate(drift);
       }
       // Large drift: hard seek — but at most once every 6s so a persistent
       // small clock error can't trigger a seek-every-2s stutter loop.
-      else if (absDrift >= 1.0 && Date.now() - lastHardSeekRef.current > 6000) {
+      else if (Date.now() - lastHardSeekRef.current > 6000) {
         lastHardSeekRef.current = Date.now();
+        audio.playbackRate = 1;
         audio.currentTime = expectedPosition;
       }
     };
@@ -222,7 +230,9 @@ export function useAudioSync(socket, onEnded) {
         if (!audio.paused) audio.pause();
         return;
       }
+      const preservePlayback = isUnchangedSnapshot(playbackStateRef.current, state) && !audio.paused;
       playbackStateRef.current = state;
+      if (preservePlayback) return;
 
       if (state.playing) {
         const syncedNow = Date.now() + clockOffset;
@@ -344,6 +354,11 @@ export function useAudioSync(socket, onEnded) {
 
   // Clean up the HLS instance when the hook unmounts.
   useEffect(() => () => {
+    const audio = audioRef.current;
+    audio.pause();
+    audio.removeAttribute('src');
+    audio.load();
+    audio.remove();
     if (hlsRef.current) {
       try { hlsRef.current.destroy(); } catch (_) { /* ignore */ }
       hlsRef.current = null;

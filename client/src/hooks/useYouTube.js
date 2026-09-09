@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { searchProvider } from './searchProvider';
 
 /**
  * YouTube IFrame Player API integration.
@@ -293,13 +294,10 @@ export function useYouTube(onEnded) {
     try {
       // Use YouTube's internal search endpoint (no API key needed)
       // This works by fetching the search page and parsing results
-      const res = await fetch(`/api/youtube/search?q=${encodeURIComponent(query)}`);
-      if (!res.ok) return [];
-      const data = await res.json();
-      return data.results || [];
+      return await searchProvider('youtube', query);
     } catch (err) {
       console.error('YouTube search error:', err);
-      return [];
+      throw err;
     }
   }, []);
 

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAudioSync } from '../hooks/useAudioSync';
+import { isUnchangedSnapshot } from '../hooks/playbackSync';
 import { useWebRTC } from '../hooks/useWebRTC';
 import { useSpotify } from '../hooks/useSpotify';
 import { useYouTube } from '../hooks/useYouTube';
@@ -10,8 +11,9 @@ import Player from './Player';
 import Queue from './Queue';
 import MembersPanel from './MembersPanel';
 import PlatformConnect from './PlatformConnect';
+import { Headphones, LogOut, Volume2, VolumeX, ListMusic, Music2 } from 'lucide-react';
 
-function Room({ socket, roomState, setRoomState, username, userId, onLeave }) {
+function Room({ socket, roomState, setRoomState, username, userId, onLeave, connected }) {
   const [queue, setQueue] = useState(roomState?.queue || []);
   const [members, setMembers] = useState(roomState?.members || []);
   const [mode, setMode] = useState(roomState?.mode || 'host');
@@ -22,6 +24,8 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave }) {
   const [spotifyActivated, setSpotifyActivated] = useState(false);
   const [songAddedToast, setSongAddedToast] = useState(null); // { name, addedBy }
   const [codeCopied, setCodeCopied] = useState(false);
+  const [copyError, setCopyError] = useState('');
+  const volumeRef = useRef(1);
   // Personal (local-only) mute: silences ALL audio engines on THIS device while
   // the room keeps playing, so a listener can step away and rejoin in sync just
   // by un-muting. Does NOT affect anyone else's playback.
@@ -223,6 +227,7 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave }) {
     // the member list, mode, queue and host identity in sync after a break.
     const handleRoomState = (state) => {
       if (!state) return;
+      setCurrentTrackIndex(state.playbackState?.trackIndex ?? 0);
       setMembers(state.members || []);
       setMode(state.mode || 'host');
       if (Array.isArray(state.queue)) setQueue(state.queue);
@@ -281,13 +286,14 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave }) {
   // Clear the song-added toast timer on unmount.
   useEffect(() => () => {
     if (songToastTimerRef.current) clearTimeout(songToastTimerRef.current);
+    if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
   }, []);
 
   // Load initial track (handles both local and platform tracks)
   useEffect(() => {
     if (queue.length > 0 && queue[currentTrackIndex]) {
       const track = queue[currentTrackIndex];
-      if (track.platform === 'spotify' || track.platform === 'apple') {
+      if (track.platform === 'spotify' || track.platform === 'apple' || track.platform === 'youtube') {
         // Platform tracks are played via their respective SDKs
         // The sync event will trigger playback on each client
       } else if (track.url) {
@@ -331,12 +337,21 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave }) {
       // Always remember the latest state first — even if the queue hasn't
       // arrived on this device yet — so the progress bar keeps advancing and
       // we can apply playback the moment the queue is ready.
+      const unchanged = isUnchangedSnapshot(platformStateRef.current, state);
       platformStateRef.current = state;
       pendingPlatformRef.current = state;
       setPlatformPlaying(!!state.playing);
 
       const track = queue[state.trackIndex];
       if (!track) return; // queue not ready yet — applied by the effect below
+      if (track.platform === 'spotify' && !spotify.isConnected) return;
+      pendingPlatformRef.current = null;
+      if (unchanged) {
+        if (track.platform === 'spotify' && state.playing) {
+          spotify.refreshPlayback(track.uri, computePlatformPosition(state) * 1000);
+        }
+        return;
+      }
 
       if (track.platform === 'youtube') {
         if (state.playing) {
@@ -487,10 +502,11 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave }) {
       if (!state || !state.playing) return;
       if (justStartedInGesture(track.uri)) return; // let a fresh gesture-load settle
       if (justChangedTrack()) return; // let an auto-advanced track buffer from its start
+      if (document.hidden || !ytStatusRef.current.isVideoPlaying) return;
       const expected = computePlatformPosition(state);
       const actual = youtube.getPosition();
       if (typeof actual !== 'number' || actual <= 0) return;
-      if (Math.abs(expected - actual) > 1.0) {
+      if (Math.abs(expected - actual) > 2.5) {
         youtube.seek(expected);
       }
     }, 3000);
@@ -516,6 +532,7 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave }) {
       if (justStartedInGesture(track.uri)) return; // let a fresh gesture-load settle
       if (justChangedTrack()) return; // let an auto-advanced track buffer from its start
       const { needsGesture, isVideoPlaying } = ytStatusRef.current;
+      if (document.hidden) return;
       if (isVideoPlaying) return; // already playing — nothing to do
       // Don't force-restart a track that has essentially finished. When a song
       // ends, isVideoPlaying is also false, and without this guard the retry
@@ -716,11 +733,23 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave }) {
     socket.emit('queue:remove', { roomId: roomState.id, trackId });
   };
 
-  const copyRoomCode = () => {
-    navigator.clipboard.writeText(roomState.id);
-    setCodeCopied(true);
-    if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
-    copyTimerRef.current = setTimeout(() => setCodeCopied(false), 1600);
+  const copyRoomCode = async () => {
+    try {
+      await navigator.clipboard.writeText(roomState.id);
+      setCodeCopied(true);
+      setCopyError('');
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+      copyTimerRef.current = setTimeout(() => setCodeCopied(false), 1600);
+    } catch {
+      setCopyError(`Copy unavailable. Room code: ${roomState.id}`);
+    }
+  };
+
+  const handleVolumeChange = value => {
+    volumeRef.current = value;
+    setVolume(value);
+    youtube.setVolume(value);
+    if (spotify.isConnected) spotify.setVolume(personalMuted ? 0 : value);
   };
 
   // Personal mute toggle — silence/​restore audio on THIS device only. The room
@@ -729,7 +758,7 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave }) {
   const applyPersonalMute = (muted) => {
     try { const a = audioRef.current; if (a) a.muted = muted; } catch (_) { /* ignore */ }
     try { if (muted) youtube.mute(); else youtube.unmute(); } catch (_) { /* ignore */ }
-    try { if (spotify.isConnected) spotify.setVolume(muted ? 0 : 1); } catch (_) { /* ignore */ }
+    try { if (spotify.isConnected) spotify.setVolume(muted ? 0 : volumeRef.current); } catch (_) { /* ignore */ }
   };
   const togglePersonalMute = () => {
     setPersonalMuted((prev) => {
@@ -927,14 +956,19 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave }) {
   // When the app returns from background / lock, re-request the current
   // position so playback catches back up in sync.
   useEffect(() => {
+    let refreshTimer;
     const resync = () => {
-      if (document.visibilityState === 'visible' && socket && roomState?.id) {
-        socket.emit('playback:request-sync', { roomId: roomState.id });
+      clearTimeout(refreshTimer);
+      if (document.visibilityState === 'visible' && socket?.connected && roomState?.id) {
+        refreshTimer = setTimeout(() => {
+          socket.emit('playback:request-sync', { roomId: roomState.id });
+        }, 150);
       }
     };
     document.addEventListener('visibilitychange', resync);
     window.addEventListener('focus', resync);
     return () => {
+      clearTimeout(refreshTimer);
       document.removeEventListener('visibilitychange', resync);
       window.removeEventListener('focus', resync);
     };
@@ -956,38 +990,7 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave }) {
         <span>♪</span><span>♫</span><span>♩</span><span>♬</span>
         <span>♪</span><span>♫</span><span>♩</span><span>♬</span>
       </div>
-      {!audioEnabled && (
-        <div
-          onClick={handleEnableAudio}
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 9999,
-            background: 'rgba(10,10,20,0.92)',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-            textAlign: 'center',
-            padding: 24
-          }}
-        >
-          <div style={{ fontSize: 64, marginBottom: 16 }}>🎧</div>
-          <h2 style={{ margin: '0 0 8px', color: '#fff' }}>Tap to Join Audio</h2>
-          <p style={{ color: 'var(--text-muted)', maxWidth: 320 }}>
-            Your phone requires one tap to allow synced music playback.
-            Tap anywhere to start listening.
-          </p>
-          <button
-            className="btn btn-primary"
-            style={{ marginTop: 20, fontSize: 18, padding: '12px 32px' }}
-            onClick={handleEnableAudio}
-          >
-            ▶ Enable Audio
-          </button>
-        </div>
-      )}
+      {!connected && <div className="room-notice" role="status">Reconnecting to your room...</div>}
       {/* Spotify device activation prompt (each device must be unlocked by a tap) */}
       {audioEnabled && spotify.isConnected && !spotifyActivated && (
         <div
@@ -1015,26 +1018,9 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave }) {
       )}
       {/* "Song added" pop-up — shown to everyone when someone adds to the queue */}
       {songAddedToast && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 20,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            zIndex: 9999,
-            background: 'linear-gradient(135deg, #7c3aed, #a855f7)',
-            color: '#fff',
-            borderRadius: 12,
-            padding: '12px 20px',
-            boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 10,
-            maxWidth: '90vw',
-            fontSize: 14
-          }}
-        >
-          <span style={{ fontSize: 18 }}>🎵</span>
+        <div className="song-toast">
+          <Music2 size={18} />
+          <span role="status"><strong>{songAddedToast.name}</strong> added by {songAddedToast.addedBy}</span>
         </div>
       )}
 
@@ -1057,16 +1043,17 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave }) {
             <span className="room-title-label">Listening Room</span>
             <div className="room-title-row">
               <h2>{roomState.name}</h2>
-              <span
+              <button
                 className={`room-code ${codeCopied ? 'copied' : ''}`}
                 onClick={copyRoomCode}
-                title="Click to copy"
+                title="Copy room code"
+                aria-label="Copy room code"
               >
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                   <path d="M16 1H4a2 2 0 0 0-2 2v14h2V3h12V1zm3 4H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zm0 16H8V7h11v14z" />
                 </svg>
                 {codeCopied ? 'Copied!' : roomState.id}
-              </span>
+              </button>
             </div>
           </div>
         </div>
@@ -1079,16 +1066,25 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave }) {
             onClick={togglePersonalMute}
             title={personalMuted ? 'Unmute audio on this device' : 'Mute audio on this device (the room keeps playing)'}
           >
-            {personalMuted ? '🔇 Muted' : '🔊 Listening'}
+            {personalMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}{personalMuted ? 'Muted' : 'Listening'}
           </button>
           <button className="btn btn-secondary" onClick={handleLeave}>
-            Leave
+            <LogOut size={16} />Leave
           </button>
         </div>
       </div>
 
       {/* Main content */}
       <div className="room-main">
+        <div className="room-toolbar">
+          <div><span className="eyebrow">THE LISTENING ROOM</span><h1>Your next good listen.</h1></div>
+          {isHost && <div className="mode-toggle" role="group" aria-label="Playback permissions">
+            <button className={mode === 'host' ? 'active' : ''} aria-pressed={mode === 'host'} onClick={() => handleModeChange('host')}>Host controls</button>
+            <button className={mode === 'collaborative' ? 'active' : ''} aria-pressed={mode === 'collaborative'} onClick={() => handleModeChange('collaborative')}>Everyone</button>
+          </div>}
+        </div>
+        {copyError && <p className="form-error" role="status">{copyError}</p>}
+        {!audioEnabled && <div className="audio-enable-bar"><Headphones size={20} /><span>Audio on this device is off</span><button className="btn btn-primary" onClick={handleEnableAudio}>Enable audio</button></div>}
         <PlatformConnect
           spotify={spotify}
           youtube={youtube}
@@ -1102,7 +1098,7 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave }) {
           queueEmpty={queue.length === 0}
         />
 
-        {queue.length > 0 && (
+        {queue.length > 0 ? (
           <>
             <h3 style={{ marginBottom: 16, fontSize: 16 }}>Queue</h3>
             <Queue
@@ -1113,7 +1109,7 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave }) {
               canControl={canControl}
             />
           </>
-        )}
+        ) : <div className="queue-empty"><ListMusic size={32} /><h2>The queue is all yours.</h2><span>No tracks yet</span></div>}
       </div>
 
       {/* Sliding Members & Chat Panel */}
@@ -1138,7 +1134,7 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave }) {
         onSeek={handleSeek}
         onNext={handleNext}
         onPrev={handlePrev}
-        onVolumeChange={setVolume}
+        onVolumeChange={handleVolumeChange}
         canControl={canControl}
       />
     </div>

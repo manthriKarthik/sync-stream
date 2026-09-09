@@ -1,0 +1,133 @@
+[
+  {
+    "id": "ed-sheeran",
+    "name": "Ed Sheeran",
+    "genre": "Pop / acoustic",
+    "color": "#ffb08d",
+    "image": "/artists/ed-sheeran-live.jpg",
+    "source": "https://commons.wikimedia.org/wiki/File:Ed_Sheeran_in_Philadelphia_08.jpg",
+    "author": "<a href=\"//commons.wikimedia.org/wiki/User:Patrick_Cristiano\" title=\"User:Patrick Cristiano\">Patrick Cristiano</a>",
+    "license": "CC BY-SA 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0"
+  },
+  {
+    "id": "the-weeknd",
+    "name": "The Weeknd",
+    "genre": "R&B / pop",
+    "color": "#ff667f",
+    "image": "/artists/the-weeknd.jpg",
+    "source": "https://commons.wikimedia.org/wiki/File:The_Weeknd_Portrait_by_Brian_Ziff.jpg",
+    "author": "<a href=\"//commons.wikimedia.org/w/index.php?title=User:Approaching12am&amp;action=edit&amp;redlink=1\" class=\"new\" title=\"User:Approaching12am (page does not exist)\">Brian Ziff</a>",
+    "license": "CC BY-SA 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0"
+  },
+  {
+    "id": "michael-jackson",
+    "name": "Michael Jackson",
+    "genre": "Pop / soul",
+    "color": "#f2da78",
+    "image": "/artists/michael-jackson-live.jpg",
+    "source": "https://commons.wikimedia.org/wiki/File:MJ%26Friends-Munich_1999-Michael_Jackson_and_Slash_on_stage.jpg",
+    "author": "MJJ-777",
+    "license": "CC BY-SA 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0"
+  },
+  {
+    "id": "anirudh-ravichander",
+    "name": "Anirudh Ravichander",
+    "genre": "Tamil / film scores",
+    "color": "#81e8ed",
+    "image": "/artists/BackAni.jpg",
+    "profileImage": "/artists/ani2.webp",
+    "customImages": true,
+    "author": "User-supplied photos; photographer and license not provided"
+  },
+  {
+    "id": "taylor-swift",
+    "name": "Taylor Swift",
+    "genre": "Pop / songwriting",
+    "color": "#ffb5c4",
+    "image": "/artists/taylor-swift-performance.jpg",
+    "source": "https://commons.wikimedia.org/wiki/File:Taylor_Swift_Performance_(31366261870).jpg",
+    "author": "<a rel=\"nofollow\" class=\"external free\" href=\"https://www.flickr.com/photos/el_ave/\">https://www.flickr.com/photos/el_ave/</a>",
+    "license": "CC BY 2.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by/2.0"
+  },
+  {
+    "id": "bruno-mars",
+    "name": "Bruno Mars",
+    "genre": "Funk / soul",
+    "color": "#f9c46b",
+    "image": "/artists/bruno-mars.jpg",
+    "source": "https://commons.wikimedia.org/wiki/File:BrunoMars24KMagicWorldTourLive_(cropped).jpg",
+    "author": "<a rel=\"nofollow\" class=\"external text\" href=\"https://www.flickr.com/photos/slgc/\">slgckgc</a>",
+    "license": "CC BY 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0"
+  },
+  {
+    "id": "billie-eilish",
+    "name": "Billie Eilish",
+    "genre": "Alternative / pop",
+    "color": "#cbef87",
+    "image": "/artists/billie-eilish.jpg",
+    "source": "https://commons.wikimedia.org/wiki/File:BillieEilishO2140725-39_-_54665577407_(cropped).jpg",
+    "author": "Raph_PH",
+    "license": "CC BY 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0"
+  },
+  {
+    "id": "arijit-singh",
+    "name": "Arijit Singh",
+    "genre": "Hindi / playback",
+    "color": "#b4e8ee",
+    "image": "/artists/arijit-singh.jpg",
+    "source": "https://commons.wikimedia.org/wiki/File:Arijit_Singh_performance_at_Chandigarh_2025.jpg",
+    "author": "<a href=\"//commons.wikimedia.org/wiki/User:Monit2004\" title=\"User:Monit2004\">Monit2004</a>",
+    "license": "CC BY 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0"
+  },
+  {
+    "id": "a-r-rahman",
+    "name": "A. R. Rahman",
+    "genre": "Film scores / world",
+    "color": "#f0ba87",
+    "image": "/artists/a-r-rahman-live.jpg",
+    "source": "https://commons.wikimedia.org/wiki/File:A._R._Rahman_at_Sufi_Concert_in_Dubai.jpg",
+    "author": "<a href=\"//commons.wikimedia.org/w/index.php?title=User:Jahabar_sadique&amp;action=edit&amp;redlink=1\" class=\"new\" title=\"User:Jahabar sadique (page does not exist)\">Jahabar sadique</a>",
+    "license": "CC BY-SA 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0"
+  },
+  {
+    "id": "dua-lipa",
+    "name": "Dua Lipa",
+    "genre": "Dance / pop",
+    "color": "#ff8fba",
+    "image": "/artists/dua-lipa-live.jpg",
+    "source": "https://commons.wikimedia.org/wiki/File:British_singer_and_songwriter_Dua_Lipa_at_the_SWR3_New_Pop_Festival_2016.jpg",
+    "author": "Harald Krichel",
+    "license": "CC BY-SA 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0"
+  },
+  {
+    "id": "harry-styles",
+    "name": "Harry Styles",
+    "genre": "Pop / rock",
+    "color": "#92dce8",
+    "image": "/artists/harry-styles.jpg",
+    "source": "https://commons.wikimedia.org/wiki/File:HarryStylesWembley170623_(65_of_93)_(52982678051)_(cropped_2).jpg",
+    "author": "<a rel=\"nofollow\" class=\"external text\" href=\"https://www.flickr.com/people/69880995@N04\">Raph_PH</a>",
+    "license": "CC BY 2.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by/2.0"
+  },
+  {
+    "id": "shreya-ghoshal",
+    "name": "Shreya Ghoshal",
+    "genre": "Indian / playback",
+    "color": "#eacf83",
+    "image": "/artists/shreya-ghoshal-live.jpg",
+    "source": "https://commons.wikimedia.org/wiki/File:Shreya_Ghoshal_performing_at_a_Concert_in_Bangalore,_Feb_2018.jpg",
+    "author": "<a href=\"//commons.wikimedia.org/w/index.php?title=User:Bodhidg1983&amp;action=edit&amp;redlink=1\" class=\"new\" title=\"User:Bodhidg1983 (page does not exist)\">Bodhisattva Dasgupta</a>",
+    "license": "CC BY-SA 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0"
+  }
+]

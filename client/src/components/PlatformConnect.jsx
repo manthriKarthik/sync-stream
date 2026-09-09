@@ -1,4 +1,5 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
+import { Music2, X } from 'lucide-react';
 import Upload from './Upload';
 import PlatformLogo from './PlatformLogo';
 
@@ -17,11 +18,17 @@ function PlatformConnect({ spotify, youtube, audius, saavn, soundcloud, roomId, 
   const [addedIds, setAddedIds] = useState(() => new Set());
   const [searching, setSearching] = useState(false);
   const [activeTab, setActiveTab] = useState('audius');
-  const [showPanel, setShowPanel] = useState(false);
+  const [showPanel, setShowPanel] = useState(true);
   const [youtubeUrl, setYoutubeUrl] = useState('');
+  const searchIdRef = useRef(0);
+  const [searchError, setSearchError] = useState('');
+  const [searched, setSearched] = useState(false);
 
   const performSearch = useCallback(async (query) => {
     if (!query || !query.trim()) return;
+    const searchId = ++searchIdRef.current;
+    setSearchError('');
+    setSearched(false);
     setSearching(true);
     setSearchResults([]);
     try {
@@ -37,11 +44,15 @@ function PlatformConnect({ spotify, youtube, audius, saavn, soundcloud, roomId, 
       } else if (activeTab === 'spotify' && spotify.isConnected) {
         results = await spotify.searchTracks(query);
       }
-      setSearchResults(results);
+      if (searchId === searchIdRef.current) {
+        setSearchResults(results || []);
+        setSearched(true);
+      }
     } catch (err) {
       console.error('Search failed:', err);
+      if (searchId === searchIdRef.current) setSearchError('Search unavailable. Please try again.');
     } finally {
-      setSearching(false);
+      if (searchId === searchIdRef.current) setSearching(false);
     }
   }, [activeTab, spotify, youtube, audius, saavn, soundcloud]);
 
@@ -52,6 +63,9 @@ function PlatformConnect({ spotify, youtube, audius, saavn, soundcloud, roomId, 
 
   // Update the query; clearing the box also clears the results list.
   const handleSearchChange = (value) => {
+    searchIdRef.current += 1;
+    setSearching(false);
+    setSearched(false);
     setSearchQuery(value);
     if (!value.trim()) setSearchResults([]);
   };
@@ -88,7 +102,7 @@ function PlatformConnect({ spotify, youtube, audius, saavn, soundcloud, roomId, 
       });
       setYoutubeUrl('');
     } else {
-      alert('Invalid YouTube URL. Try pasting a full link like https://youtube.com/watch?v=...');
+      setSearchError('Enter a valid YouTube video URL.');
     }
   };
 
@@ -126,12 +140,15 @@ function PlatformConnect({ spotify, youtube, audius, saavn, soundcloud, roomId, 
     const authUrl = `https://accounts.spotify.com/authorize?client_id=${clientId}&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scopes)}&code_challenge_method=S256&code_challenge=${codeChallenge}`;
     
     const popup = window.open(authUrl, 'spotify-auth', 'width=500,height=700');
-    window.addEventListener('message', (event) => {
+    const handleToken = (event) => {
+      if (event.origin !== window.location.origin || event.source !== popup) return;
       if (event.data?.type === 'spotify-token') {
         spotify.connect(event.data.token);
         popup?.close();
+        window.removeEventListener('message', handleToken);
       }
-    }, { once: true });
+    };
+    window.addEventListener('message', handleToken);
   };
 
   if (!showPanel) {
@@ -141,29 +158,23 @@ function PlatformConnect({ spotify, youtube, audius, saavn, soundcloud, roomId, 
         onClick={() => setShowPanel(true)}
         style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}
       >
-        🎵 Add Music &amp; Upload Files
+        <Music2 size={18} />Add music
       </button>
     );
   }
 
   return (
-    <div style={{
-      background: 'rgba(14, 14, 20, 0.72)',
-      backdropFilter: 'blur(22px)',
-      WebkitBackdropFilter: 'blur(22px)',
-      border: '1px solid var(--border)',
-      borderRadius: 'var(--radius)',
-      padding: 20,
-      marginBottom: 20
-    }}>
+    <section className="music-browser" aria-label="Music library">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <h3 style={{ fontSize: 14 }}>🎵 Add Music</h3>
+        <h2 className="library-title"><Music2 size={19} />Find your sound</h2>
         <button
           className="btn-icon"
           onClick={() => setShowPanel(false)}
+          aria-label="Close music library"
+          title="Close music library"
           style={{ width: 28, height: 28, fontSize: 12 }}
         >
-          ✕
+          <X size={16} />
         </button>
       </div>
 
@@ -173,7 +184,15 @@ function PlatformConnect({ spotify, youtube, audius, saavn, soundcloud, roomId, 
           <button
             key={t.id}
             className={`platform-tab ${activeTab === t.id ? 'active' : ''}`}
-            onClick={() => setActiveTab(t.id)}
+            aria-pressed={activeTab === t.id}
+            onClick={() => {
+              searchIdRef.current += 1;
+              setActiveTab(t.id);
+              setSearchResults([]);
+              setSearching(false);
+              setSearched(false);
+              setSearchError('');
+            }}
           >
             <span className="platform-tab-logo"><PlatformLogo platform={t.id} size={18} /></span>
             <span>{t.label}</span>
@@ -341,6 +360,8 @@ function PlatformConnect({ spotify, youtube, audius, saavn, soundcloud, roomId, 
       )}
 
       {/* Search Results */}
+      {searchError && <p className="form-error" role="alert">{searchError}</p>}
+      {searched && !searching && searchResults.length === 0 && <p className="search-empty" role="status">No tracks found for "{searchQuery}".</p>}
       {activeTab !== 'upload' && searchResults.length > 0 && (
         <div style={{ maxHeight: 300, overflowY: 'auto', marginTop: 12 }}>
           {searchResults.map((track) => {
@@ -419,7 +440,7 @@ function PlatformConnect({ spotify, youtube, audius, saavn, soundcloud, roomId, 
                   onClick={(e) => { e.stopPropagation(); handleSelectTrack(track); }}
                   style={{ padding: '4px 10px', fontSize: 11 }}
                 >
-                  {queueEmpty ? '▶ Play' : '+ Add'}
+                  {queueEmpty && canControl ? '▶ Play' : '+ Add'}
                 </button>
               )}
             </div>
@@ -427,7 +448,7 @@ function PlatformConnect({ spotify, youtube, audius, saavn, soundcloud, roomId, 
           })}
         </div>
       )}
-    </div>
+    </section>
   );
 }
 

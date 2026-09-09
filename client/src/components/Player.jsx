@@ -1,9 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
+import { Disc3, Pause, Play, SkipBack, SkipForward, Volume2 } from 'lucide-react';
 
 function Player({ isPlaying, currentTime, duration, currentTrack, onPlay, onPause, onSeek, onNext, onPrev, onVolumeChange, canControl }) {
   const [volume, setVolume] = useState(1);
   const [overflows, setOverflows] = useState(false);
-  const progressRef = useRef(null);
   const nameRef = useRef(null);
 
   // Only scroll the title when it's actually too long to fit
@@ -22,17 +22,10 @@ function Player({ isPlaying, currentTime, duration, currentTrack, onPlay, onPaus
   }, [currentTrack?.id, currentTrack?.name]);
 
   const formatTime = (seconds) => {
-    if (!seconds || isNaN(seconds)) return '0:00';
+    if (!Number.isFinite(seconds) || seconds < 0) return '0:00';
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  const handleProgressClick = (e) => {
-    if (!canControl || !duration) return;
-    const rect = progressRef.current.getBoundingClientRect();
-    const percent = (e.clientX - rect.left) / rect.width;
-    onSeek(percent * duration);
   };
 
   const handleVolumeChange = (e) => {
@@ -41,7 +34,9 @@ function Player({ isPlaying, currentTime, duration, currentTrack, onPlay, onPaus
     onVolumeChange(val);
   };
 
-  const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
+  const safeDuration = Number.isFinite(duration) && duration > 0 ? duration : 0;
+  const safeTime = Number.isFinite(currentTime) ? Math.max(0, Math.min(currentTime, safeDuration)) : 0;
+  const progress = safeDuration > 0 ? (safeTime / safeDuration) * 100 : 0;
 
   return (
     <div className={`player-bar ${isPlaying && currentTrack ? 'is-live' : ''}`}>
@@ -51,7 +46,7 @@ function Player({ isPlaying, currentTime, duration, currentTrack, onPlay, onPaus
           {currentTrack?.albumArt ? (
             <img src={currentTrack.albumArt} alt="" className="player-art" />
           ) : (
-            <div className="player-art player-art-placeholder">🎵</div>
+            <div className="player-art player-art-placeholder"><Disc3 size={26} /></div>
           )}
           {isPlaying && currentTrack && (
             <span className="now-playing-eq" aria-hidden="true">
@@ -80,13 +75,11 @@ function Player({ isPlaying, currentTime, duration, currentTrack, onPlay, onPaus
           <button
             className="btn-icon"
             onClick={onPrev}
-            disabled={!canControl}
+            disabled={!canControl || !currentTrack}
             title="Previous"
             aria-label="Previous"
           >
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">
-              <path d="M7 6h2v12H7zm2.5 6l9 6V6z" />
-            </svg>
+            <SkipBack size={20} />
           </button>
 
           <button
@@ -96,41 +89,23 @@ function Player({ isPlaying, currentTime, duration, currentTrack, onPlay, onPaus
             title={isPlaying ? 'Pause' : 'Play'}
             aria-label={isPlaying ? 'Pause' : 'Play'}
           >
-            {isPlaying ? (
-              <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true">
-                <path d="M6 5h4v14H6zm8 0h4v14h-4z" />
-              </svg>
-            ) : (
-              <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true">
-                <path d="M8 5v14l11-7z" />
-              </svg>
-            )}
+            {isPlaying ? <Pause size={22} fill="currentColor" /> : <Play size={22} fill="currentColor" />}
           </button>
 
           <button
             className="btn-icon"
             onClick={onNext}
-            disabled={!canControl}
+            disabled={!canControl || !currentTrack}
             title="Next"
             aria-label="Next"
           >
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">
-              <path d="M15 6h2v12h-2zM5.5 6l9 6-9 6z" />
-            </svg>
+            <SkipForward size={20} />
           </button>
         </div>
 
         <div className="player-progress">
           <span className="time">{formatTime(currentTime)}</span>
-          <div
-            className={`progress-bar ${canControl ? '' : 'no-control'}`}
-            ref={progressRef}
-            onClick={handleProgressClick}
-          >
-            <div className={`progress-fill ${isPlaying ? 'playing' : ''}`} style={{ width: `${progress}%` }}>
-              <span className="progress-thumb" />
-            </div>
-          </div>
+          <input type="range" className="seek-slider" aria-label="Playback position" min="0" max={safeDuration || 1} step="0.1" value={safeTime} disabled={!canControl || !safeDuration || !currentTrack} onChange={event => onSeek(Number(event.target.value))} style={{ '--progress': `${progress}%` }} />
           <span className="time">{formatTime(duration)}</span>
         </div>
       </div>
@@ -138,9 +113,10 @@ function Player({ isPlaying, currentTime, duration, currentTrack, onPlay, onPaus
       {/* Right: volume */}
       <div className="player-extra">
         <div className="player-volume">
-          <span className="player-volume-icon">🔊</span>
+          <Volume2 size={18} />
           <input
             type="range"
+            aria-label="Volume"
             min="0"
             max="1"
             step="0.05"

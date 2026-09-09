@@ -141,6 +141,23 @@ export function useSpotify() {
   }, [token, deviceId]);
 
   // Pause
+  const refreshPlayback = useCallback(async (spotifyUri, positionMs) => {
+    if (!player) return;
+    try {
+      const state = await player.getCurrentState();
+      if (state?.track_window?.current_track?.uri === spotifyUri) {
+        if (state.paused) {
+          await player.seek(Math.floor(positionMs));
+          await player.resume();
+        }
+      } else {
+        await playTrack(spotifyUri, positionMs);
+      }
+    } catch {
+      setError('Spotify could not resume playback. Try enabling audio again.');
+    }
+  }, [player, playTrack]);
+
   const pause = useCallback(async () => {
     if (player) await player.pause();
   }, [player]);
@@ -201,6 +218,7 @@ export function useSpotify() {
     activate,
     transferPlayback,
     playTrack,
+    refreshPlayback,
     pause,
     resume,
     seek,

@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react';
+import { searchProvider } from './searchProvider';
 
 /**
  * JioSaavn integration — free full-song streaming with a huge Bollywood /
@@ -19,14 +20,11 @@ export function useSaavn() {
     if (!query) return [];
     setError(null);
     try {
-      const res = await fetch(`/api/saavn/search?q=${encodeURIComponent(query)}`);
-      if (!res.ok) return [];
-      const data = await res.json();
-      return data.results || [];
+      return await searchProvider('saavn', query);
     } catch (err) {
       console.error('Saavn search error:', err);
       setError('Saavn search failed');
-      return [];
+      throw err;
     }
   }, []);
 

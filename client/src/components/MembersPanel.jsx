@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { MessageCircle, X } from 'lucide-react';
 
 function MembersPanel({ members, hostId, hostUserId, currentUserId, isHost, socket, roomId }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -76,6 +77,13 @@ function MembersPanel({ members, hostId, hostUserId, currentUserId, isHost, sock
 
   useEffect(() => () => {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    audioCtxRef.current?.close().catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const handleKey = event => { if (event.key === 'Escape') setIsOpen(false); };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
   }, []);
 
   const sendMessage = (e) => {
@@ -132,10 +140,14 @@ function MembersPanel({ members, hostId, hostUserId, currentUserId, isHost, sock
       {/* Toggle button */}
       <button
         className="panel-toggle"
+        aria-label={isOpen ? 'Close listeners and chat' : 'Open listeners and chat'}
+        title={isOpen ? 'Close listeners and chat' : 'Open listeners and chat'}
+        aria-expanded={isOpen}
+        aria-controls="listeners-panel"
         onClick={() => setIsOpen(!isOpen)}
         style={{
           position: 'fixed',
-          right: isOpen ? 340 : 0,
+          right: isOpen ? 'min(340px, calc(100vw - 48px))' : 0,
           top: '50%',
           transform: 'translateY(-50%)',
           zIndex: 1001,
@@ -144,7 +156,7 @@ function MembersPanel({ members, hostId, hostUserId, currentUserId, isHost, sock
           borderRadius: '8px 0 0 8px',
           background: 'var(--accent)',
           border: 'none',
-          color: '#fff',
+          color: '#13231a',
           fontSize: 18,
           cursor: 'pointer',
           display: 'flex',
@@ -154,7 +166,7 @@ function MembersPanel({ members, hostId, hostUserId, currentUserId, isHost, sock
           boxShadow: '-2px 0 12px rgba(0,0,0,0.3)'
         }}
       >
-        {isOpen ? '›' : '‹'}
+        {isOpen ? <X size={18} /> : <MessageCircle size={18} />}
         {!isOpen && unread > 0 && (
           <span className="panel-badge">{unread > 9 ? '9+' : unread}</span>
         )}
@@ -162,12 +174,17 @@ function MembersPanel({ members, hostId, hostUserId, currentUserId, isHost, sock
 
       {/* Sliding Panel */}
       <div
+        id="listeners-panel"
+        className="listeners-panel"
+        aria-label="Listeners and chat"
+        inert={isOpen ? undefined : ''}
         style={{
           position: 'fixed',
           top: 0,
           right: isOpen ? 0 : -340,
-          width: 340,
-          height: '100vh',
+          width: 'min(340px, calc(100vw - 48px))',
+          height: '100dvh',
+          visibility: isOpen ? 'visible' : 'hidden',
           background: 'rgba(12, 12, 18, 0.72)',
           backdropFilter: 'blur(26px)',
           WebkitBackdropFilter: 'blur(26px)',
@@ -432,6 +449,8 @@ function MembersPanel({ members, hostId, hostUserId, currentUserId, isHost, sock
               type="text"
               className="input"
               placeholder="Type a message..."
+              aria-label="Chat message"
+              maxLength={2000}
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
               style={{ flex: 1, fontSize: 13 }}
@@ -439,6 +458,7 @@ function MembersPanel({ members, hostId, hostUserId, currentUserId, isHost, sock
             <button
               type="submit"
               className="btn btn-primary"
+              disabled={!newMessage.trim()}
               style={{ padding: '10px 16px' }}
             >
               Send
