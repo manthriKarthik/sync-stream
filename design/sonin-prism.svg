@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" role="img" aria-labelledby="title">
+  <title id="title">Sonin Prism: sculpted glass S ribbon</title>
+  <defs>
+    <linearGradient id="tile" x1="25" y1="0" x2="226" y2="256" gradientUnits="userSpaceOnUse"><stop stop-color="#EFF9FF"/><stop offset=".45" stop-color="#D8E5F3"/><stop offset="1" stop-color="#ABBED7"/></linearGradient>
+    <linearGradient id="ribbon" x1="76" y1="45" x2="185" y2="216" gradientUnits="userSpaceOnUse"><stop stop-color="white"/><stop offset=".26" stop-color="#F5FCFF" stop-opacity=".95"/><stop offset=".51" stop-color="#9CB3D2" stop-opacity=".8"/><stop offset=".68" stop-color="#F7FEFF"/><stop offset="1" stop-color="#BFC9E3"/></linearGradient>
+    <linearGradient id="edge" x1="70" y1="45" x2="185" y2="206" gradientUnits="userSpaceOnUse"><stop stop-color="white"/><stop offset=".5" stop-color="#F8FDFF" stop-opacity=".25"/><stop offset="1" stop-color="white" stop-opacity=".9"/></linearGradient>
+    <linearGradient id="fold" x1="100" y1="99" x2="154" y2="151" gradientUnits="userSpaceOnUse"><stop stop-color="#7196C4"/><stop offset=".48" stop-color="#D3F3FF"/><stop offset="1" stop-color="#FFF5FF"/></linearGradient>
+    <filter id="shadow" x="-50%" y="-30%" width="200%" height="190%"><feDropShadow dx="0" dy="13" stdDeviation="8" flood-color="#415E85" flood-opacity=".32"/><feDropShadow dx="0" dy="2" stdDeviation="1" flood-color="#63809D" flood-opacity=".35"/></filter>
+  </defs>
+  <path d="M87 2H169C230 2 254 26 254 87V169C254 230 230 254 169 254H87C26 254 2 230 2 169V87C2 26 26 2 87 2Z" fill="url(#tile)" stroke="#FFFFFF" stroke-opacity=".7" stroke-width="2"/>
+  <g filter="url(#shadow)">
+    <path d="M181 56H105C83 56 68 70 68 89C68 103 77 114 94 123L151 153C158 157 157 164 148 164H73V200H153C178 200 194 185 194 165C194 150 186 139 167 129L111 100C104 96 105 90 114 90H181Z" fill="url(#ribbon)" stroke="url(#edge)" stroke-width="1.8"/>
+    <path d="M94 123 151 153C158 157 157 164 148 164H162C179 164 182 151 167 143L111 113C100 107 89 100 88 88C84 101 86 114 94 123Z" fill="url(#fold)" opacity=".75"/>
+    <path d="M105 58H179M75 198H153C175 198 191 185 191 167" stroke="white" stroke-opacity=".8" stroke-width="2" stroke-linecap="round"/>
+  </g>
+</svg>

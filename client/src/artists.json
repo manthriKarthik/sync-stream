@@ -45,10 +45,13 @@
     "name": "Taylor Swift",
     "genre": "Pop / songwriting",
     "color": "#ffb5c4",
-    "image": "/artists/taylor-swift-custom.jpg",
-    "profileImage": "/artists/taylor-swift-custom.jpg",
+    "image": "/artists/taylor-swift-performance.jpg",
+    "profileImage": "/artists/taylor-swift-performance.jpg",
     "customImages": true,
-    "author": "User-supplied photo; photographer and license not provided"
+    "source": "https://commons.wikimedia.org/wiki/File:Taylor_Swift_Performance_(31366261870).jpg",
+    "author": "el_ave",
+    "license": "CC BY 2.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by/2.0"
   },
   {
     "id": "bruno-mars",

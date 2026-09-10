@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2048" height="2048" viewBox="0 0 256 256" fill="none" role="img" aria-labelledby="title desc">
+  <title id="title">Sonin Unison, pearl glass edition</title>
+  <desc id="desc">A silver-rimmed graphite circular mark with two opposing, softly sculpted pearl-glass sound forms.</desc>
+  <defs>
+    <linearGradient id="rim" x1="48" y1="20" x2="212" y2="238" gradientUnits="userSpaceOnUse"><stop stop-color="#FDFEFF"/><stop offset=".23" stop-color="#B7C3D0"/><stop offset=".48" stop-color="#687786"/><stop offset=".7" stop-color="#F4FAFF"/><stop offset="1" stop-color="#8B9AAC"/></linearGradient>
+    <linearGradient id="face" x1="79" y1="15" x2="180" y2="238" gradientUnits="userSpaceOnUse"><stop stop-color="#4C535F"/><stop offset=".4" stop-color="#272B33"/><stop offset="1" stop-color="#111318"/></linearGradient>
+    <linearGradient id="pearl" x1="105" y1="54" x2="148" y2="125" gradientUnits="userSpaceOnUse"><stop stop-color="#FFFFFF"/><stop offset=".37" stop-color="#EDF4FC"/><stop offset=".74" stop-color="#C6D4E4"/><stop offset="1" stop-color="#94A7BE"/></linearGradient>
+    <linearGradient id="edge" x1="126" y1="55" x2="134" y2="125" gradientUnits="userSpaceOnUse"><stop stop-color="white"/><stop offset="1" stop-color="#DAE7F5" stop-opacity=".2"/></linearGradient>
+    <filter id="relief" x="-25%" y="-30%" width="150%" height="180%"><feDropShadow dx="0" dy="4" stdDeviation="3" flood-color="#02050B" flood-opacity=".5"/></filter>
+    <path id="sound" d="M190 96C179 62 142 47 109 59C78 70 64 99 72 124C91 103 113 97 137 106C160 114 178 111 190 96Z"/>
+  </defs>
+  <circle cx="128" cy="128" r="120" fill="url(#rim)"/>
+  <circle cx="128" cy="128" r="117" fill="url(#face)" stroke="#0D1015" stroke-opacity=".55"/>
+  <circle cx="128" cy="128" r="114.5" stroke="#EAF2FF" stroke-opacity=".12"/>
+  <g filter="url(#relief)">
+    <use href="#sound" fill="url(#pearl)" stroke="url(#edge)" stroke-width=".9"/>
+    <g transform="rotate(180 128 128)"><use href="#sound" fill="url(#pearl)" stroke="url(#edge)" stroke-width=".9"/></g>
+  </g>
+  <path d="M78 103C81 84 94 69 111 63C137 53 165 63 179 80" stroke="white" stroke-opacity=".68" stroke-width="1.4" stroke-linecap="round"/>
+  <path d="M78 103C81 84 94 69 111 63C137 53 165 63 179 80" stroke="white" stroke-opacity=".46" stroke-width="1.4" stroke-linecap="round" transform="rotate(180 128 128)"/>
+</svg>

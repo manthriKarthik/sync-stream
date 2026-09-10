@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sonin / Flow</title>
+  <style>
+    @font-face { font-family: Manrope; src: url('sonin-manrope.ttf') format('truetype'); font-weight: 200 800; font-display: block; }
+    :root { color-scheme: light; --ink: #18191d; --muted: #75777f; --paper: #f5f6f8; --azure: #087ef5; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--paper); color: var(--ink); font-family: Manrope, sans-serif; letter-spacing: 0; }
+    header { max-width: 1200px; margin: auto; padding: 26px 40px; display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+    header strong { font-size: 18px; font-weight: 750; }
+    header span { color: var(--muted); font-size: 11px; }
+    main { max-width: 1200px; margin: auto; }
+    .hero { padding: 28px 24px 51px; display: flex; align-items: center; flex-direction: column; background: linear-gradient(180deg, #fff0, #ffffffb0 70%, #fff0); }
+    .hero-icon { width: 202px; height: 202px; display: block; filter: drop-shadow(0 16px 18px #0861e81a); }
+    h1 { font-size: 62px; line-height: 1.1; font-weight: 650; margin: 21px 0 0; }
+    .hero p { font-size: 13px; color: var(--muted); margin: 12px 0 0; }
+    .studies { display: grid; grid-template-columns: 1fr 1fr 1fr; margin: 0 40px; border-top: 1px solid #dedfe4; border-bottom: 1px solid #dedfe4; }
+    .study { min-width: 0; min-height: 202px; display: flex; align-items: center; justify-content: center; position: relative; padding: 30px 20px 57px; }
+    .study + .study { border-left: 1px solid #dedfe4; }
+    .caption { position: absolute; bottom: 21px; color: var(--muted); font-size: 10px; }
+    .lockup { display: flex; align-items: center; gap: 10px; }
+    .lockup img { width: 53px; height: 53px; }
+    .wordmark { font-weight: 650; font-size: 34px; line-height: 1; }
+    .night { background: #1b1d22; color: white; }
+    .night .caption { color: #a6a9b2; }
+    .night .lockup img { filter: brightness(0) invert(1); width: 60px; height: 60px; }
+    .sizes { display: flex; align-items: center; gap: 20px; }
+    .sizes img { width: 62px; height: 62px; }
+    .sizes img:nth-child(2) { width: 36px; height: 36px; }
+    .sizes img:nth-child(3) { width: 20px; height: 20px; }
+    .details { padding: 29px 40px 23px; display: flex; align-items: center; justify-content: space-between; gap: 30px; }
+    .colours { display: flex; flex-wrap: wrap; gap: 25px; }
+    .colour { display: flex; align-items: center; gap: 9px; font-size: 10px; }
+    .swatch { display: block; width: 19px; height: 19px; border-radius: 50%; background: var(--colour); border: 1px solid #18191d12; }
+    .type { font-size: 10px; color: var(--muted); white-space: nowrap; }
+    footer { max-width: 1200px; margin: auto; padding: 8px 40px 24px; display: flex; justify-content: space-between; color: var(--muted); font-size: 10px; }
+    footer a { color: var(--muted); text-underline-offset: 3px; }
+    @media (max-width: 650px) {
+      header { padding: 23px 23px; }
+      .hero { padding-top: 28px; padding-bottom: 40px; }
+      .hero-icon { width: 168px; height: 168px; }
+      h1 { font-size: 52px; margin-top: 20px; }
+      .studies { grid-template-columns: 1fr 1fr; margin: 0 20px; }
+      .study { min-height: 165px; padding: 22px 10px 49px; }
+      .study:last-child { grid-column: 1 / -1; border-left: 0; border-top: 1px solid #dedfe4; min-height: 146px; }
+      .lockup { gap: 4px; }
+      .lockup img { width: 36px; height: 36px; }
+      .night .lockup img { width: 42px; height: 42px; }
+      .wordmark { font-size: 26px; }
+      .details { padding: 24px 23px; flex-direction: column; align-items: flex-start; gap: 22px; }
+      .colours { gap: 14px 20px; }
+      footer { padding: 0 23px 24px; gap: 16px; }
+    }
+  </style>
+</head>
+<body>
+  <header><strong>sonin</strong><span>03 / Flow</span></header>
+  <main>
+    <section class="hero" aria-label="Sonin logo concept">
+      <img class="hero-icon" src="sonin-icon-v3.svg" alt="Azure and cyan Sonin app icon with a continuous white sound wave">
+      <h1>sonin</h1>
+      <p>In tune. Together.</p>
+    </section>
+    <section class="studies" aria-label="Brand applications">
+      <div class="study"><div class="lockup"><img src="sonin-icon-v3.svg" alt="Sonin icon"><span class="wordmark">sonin</span></div><span class="caption">Primary signature</span></div>
+      <div class="study night"><div class="lockup"><img src="sonin-symbol-v3.svg" alt="White Sonin symbol"><span class="wordmark">sonin</span></div><span class="caption">Monochrome</span></div>
+      <div class="study"><div class="sizes"><img src="sonin-icon-v3.svg" alt="62 pixel icon"><img src="sonin-icon-v3.svg" alt="36 pixel icon"><img src="sonin-icon-v3.svg" alt="20 pixel icon"></div><span class="caption">Small-scale study</span></div>
+    </section>
+    <section class="details" aria-label="Colour and typography">
+      <div class="colours">
+        <span class="colour"><i class="swatch" style="--colour: #087ef5"></i>Azure / #087EF5</span>
+        <span class="colour"><i class="swatch" style="--colour: #66e9f4"></i>Ice / #66E9F4</span>
+        <span class="colour"><i class="swatch" style="--colour: #18191d"></i>Graphite / #18191D</span>
+        <span class="colour"><i class="swatch" style="--colour: #f5f6f8"></i>Pearl / #F5F6F8</span>
+      </div>
+      <span class="type">Manrope / SemiBold</span>
+    </section>
+  </main>
+  <footer><span>Sonin / Identity exploration</span><a href="sonin-icon-v3.svg" download>Vector icon</a></footer>
+</body>
+</html>

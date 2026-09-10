@@ -117,7 +117,7 @@ function App() {
 
   const handleLeaveRoom = () => {
     if (roomState) {
-      socket.emit('room:leave', { roomId: roomState.id });
+      if (socket?.connected) socket.emit('room:leave', { roomId: roomState.id });
       sessionRef.current = null;
       setRoomState(null);
       setView('landing');
@@ -143,7 +143,7 @@ function App() {
       {error && <div className="room-notice" role="alert">{error}<button className="btn btn-secondary" onClick={() => setError('')}>Dismiss</button></div>}
       <Suspense fallback={<p className="room-notice" role="status">Opening your room...</p>}>
       <Room
-        connected={connected}
+        connected={connected && !!roomState?.members?.some(member => member.id === socket?.id)}
         socket={socket}
         roomState={roomState}
         setRoomState={setRoomState}

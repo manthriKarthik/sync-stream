@@ -48,6 +48,11 @@ npm run dev
 
 ## Tests And Validation
 
+See [TESTING-REPORT.md](TESTING-REPORT.md) for the latest playback interruption,
+offline/reconnection checks, reproduced fixes, and remaining device/provider
+limits. Buffered audio can continue offline; streaming that needs new data
+cannot. Shared room actions stay disabled until reconnection and rejoin finish.
+
 ### Artist Showcase
 
 The entry screen includes 12 artist spotlights with local photos, crossfades,

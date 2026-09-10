@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { MessageCircle, X } from 'lucide-react';
 
-function MembersPanel({ members, hostId, hostUserId, currentUserId, isHost, socket, roomId }) {
+function MembersPanel({ members, hostId, hostUserId, currentUserId, isHost, socket, roomId, connected }) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
@@ -88,7 +88,7 @@ function MembersPanel({ members, hostId, hostUserId, currentUserId, isHost, sock
 
   const sendMessage = (e) => {
     e.preventDefault();
-    if (!newMessage.trim() || !socket) return;
+    if (!newMessage.trim() || !connected || !socket?.connected) return;
 
     socket.emit('chat:send', {
       roomId,
@@ -98,12 +98,12 @@ function MembersPanel({ members, hostId, hostUserId, currentUserId, isHost, sock
   };
 
   const kickMember = (member) => {
-    if (!isHost || member.userId === currentUserId) return;
+    if (!isHost || !connected || !socket?.connected || member.userId === currentUserId) return;
     socket.emit('room:kick', { roomId, memberId: member.id });
   };
 
   const toggleControl = (member, allowed) => {
-    if (!isHost || member.userId === hostUserId) return;
+    if (!isHost || !connected || !socket?.connected || member.userId === hostUserId) return;
     socket.emit('room:set-control', { roomId, memberId: member.id, allowed });
   };
 
@@ -307,6 +307,7 @@ function MembersPanel({ members, hostId, hostUserId, currentUserId, isHost, sock
                   {isHost && !isMemberHost && (
                     <button
                       onClick={() => toggleControl(member, !member.canControl)}
+                      disabled={!connected}
                       title={member.canControl ? 'Revoke playback control' : 'Give playback control'}
                       style={{
                         background: member.canControl ? 'rgba(124,58,237,0.25)' : 'rgba(255,255,255,0.08)',
@@ -329,6 +330,7 @@ function MembersPanel({ members, hostId, hostUserId, currentUserId, isHost, sock
                   {isHost && !isMemberHost && (
                     <button
                       onClick={() => kickMember(member)}
+                      disabled={!connected}
                       style={{
                         background: 'rgba(239,68,68,0.2)',
                         border: '1px solid rgba(239,68,68,0.3)',
@@ -458,7 +460,7 @@ function MembersPanel({ members, hostId, hostUserId, currentUserId, isHost, sock
             <button
               type="submit"
               className="btn btn-primary"
-              disabled={!newMessage.trim()}
+              disabled={!connected || !newMessage.trim()}
               style={{ padding: '10px 16px' }}
             >
               Send

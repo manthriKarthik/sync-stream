@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { UploadCloud, LoaderCircle } from 'lucide-react';
 
-function Upload({ roomId, userId }) {
+function Upload({ roomId, userId, connected }) {
   const fileInputRef = useRef(null);
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
@@ -9,7 +9,7 @@ function Upload({ roomId, userId }) {
   const uploadingRef = useRef(false);
 
   const handleUpload = async (file) => {
-    if (!file || uploadingRef.current) return;
+    if (!file || !connected || uploadingRef.current) return;
     setError('');
     if (!/\.(mp3|wav|ogg|flac|m4a|aac)$/i.test(file.name)) {
       setError('Choose an MP3, WAV, OGG, FLAC, M4A or AAC file.');
@@ -81,13 +81,14 @@ function Upload({ roomId, userId }) {
         type="file"
         accept=".mp3,.wav,.ogg,.flac,.m4a,.aac"
         aria-label="Audio file"
+        disabled={!connected || uploading}
         onChange={handleFileSelect}
         style={{ display: 'none' }}
       />
       <div className="upload-icon">
         {uploading ? <LoaderCircle size={32} /> : <UploadCloud size={32} />}
       </div>
-      <button type="button" className="btn btn-secondary" onClick={() => fileInputRef.current?.click()} disabled={uploading}>
+      <button type="button" className="btn btn-secondary" onClick={() => fileInputRef.current?.click()} disabled={!connected || uploading}>
         {uploading ? 'Uploading...' : 'Choose audio file'}
       </button>
       {error && <p className="form-error" role="alert">{error}</p>}

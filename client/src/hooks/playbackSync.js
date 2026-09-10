@@ -1,3 +1,5 @@
+export const SOFT_DRIFT_LIMIT = 2.5;
+
 export function isUnchangedSnapshot(previous, next) {
   return next?.snapshot === true
     && previous != null

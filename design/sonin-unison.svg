@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" role="img" aria-labelledby="title">
+  <title id="title">Sonin Unison: opposing sound forms in a circular seal</title>
+  <circle cx="128" cy="128" r="124" fill="#19191B"/>
+  <path d="M190 97C181 61 140 44 107 57C74 70 61 100 70 127C88 102 111 95 137 105C161 114 177 111 190 97Z" fill="#FAFAFA"/>
+  <path d="M190 97C181 61 140 44 107 57C74 70 61 100 70 127C88 102 111 95 137 105C161 114 177 111 190 97Z" fill="#FAFAFA" transform="rotate(180 128 128)"/>
+</svg>

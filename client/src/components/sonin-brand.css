@@ -1,0 +1,34 @@
+@font-face {
+  font-family: 'Manrope';
+  src: url('/sonin-manrope.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+}
+
+.sonin-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  color: inherit;
+  font: 550 28px/1 'Manrope', sans-serif;
+  white-space: nowrap;
+}
+
+.sonin-logo img {
+  display: block;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+}
+
+.room-header .sonin-logo { font-size: 24px; }
+.room-header .sonin-logo img { width: 36px; height: 36px; }
+
+@media (max-width: 480px) {
+  .sonin-logo { font-size: 24px; }
+  .sonin-logo img { width: 36px; height: 36px; }
+  .room-header .sonin-logo { font-size: 21px; gap: 5px; }
+  .room-header .sonin-logo img { width: 32px; height: 32px; }
+}

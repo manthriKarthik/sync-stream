@@ -12,6 +12,14 @@ test('all artist photos load, manual navigation pauses, and credits are availabl
     await expect(page.getByRole('heading', { name: artist.name, exact: true })).toBeVisible();
     await expect(page.locator('.artist-photo.is-active img')).toHaveJSProperty('complete', true);
     await expect(page.locator('.artist-photo.is-active img')).not.toHaveJSProperty('naturalWidth', 0);
+    await expect(page.locator('.artist-photo.is-active img')).toHaveCSS('object-fit', 'contain');
+    await expect(page.locator('.artist-photo.is-active img')).toHaveCSS('transform', 'none');
+    await expect(page.locator('.artist-photo.is-active img')).toHaveCSS('filter', 'none');
+    if (testInfo.project.name === 'mobile') {
+      const portrait = await page.locator('.artist-photo.is-active').boundingBox();
+      const link = await page.locator('.stage-link').boundingBox();
+      expect(portrait.y).toBeGreaterThanOrEqual(link.y + link.height);
+    }
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.locator('.artist-stage').screenshot({ path: testInfo.outputPath(`${artist.id}.png`), animations: 'disabled' });
   }
@@ -20,8 +28,12 @@ test('all artist photos load, manual navigation pauses, and credits are availabl
   await page.getByRole('button', { name: 'Next artist' }).click();
   await expect(page.getByRole('heading', { name: 'Taylor Swift', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Play artist slideshow' })).toBeVisible();
-  await page.getByText('Photo credits', { exact: true }).click();
-  await expect(page.locator('.artist-credits a').first()).toBeVisible();
+  await expect(page.getByText('Photo credits', { exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Image licenses', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: 'Image licenses' })).toBeVisible();
+  await expect(page.locator('.image-license-dialog a').first()).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog')).not.toBeVisible();
   expect(errors).toEqual([]);
 });
 

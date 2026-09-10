@@ -56,7 +56,7 @@ function ArtistShowcase() {
         <div className="stage-shade" />
         <div className="entry-title">
           <span className="eyebrow"><span className="live-dot" /> DIFFERENT PLACES. SAME SONG.</span>
-          <h1>Sonin<span>.</span></h1>
+          <h1 aria-label="Sonin">sonin</h1>
           <p>For the songs that bring us together.</p>
           <a href="#room-access" className="stage-link">Find your people. Press play.<ArrowRight size={18} /></a>
         </div>
@@ -78,11 +78,6 @@ function ArtistShowcase() {
           <img src={artist.profileImage || artist.image} alt="" loading="lazy" /><span>{artist.name}</span>
         </button>)}
       </div>
-      <details className="artist-credits">
-        <summary>Photo credits</summary>
-        <ul>{artists.map(artist => <li key={artist.id}>{artist.customImages ? <span>{artist.name}: {artist.author}</span> : <><a href={artist.source} target="_blank" rel="noreferrer">{artist.name}: {new DOMParser().parseFromString(artist.author || 'Wikimedia Commons', 'text/html').body.textContent}</a><span> / </span><a href={artist.licenseUrl || artist.source} target="_blank" rel="noreferrer">{artist.license}</a></>}</li>)}</ul>
-        <p>Photos cropped for display. Artist imagery does not imply endorsement.</p>
-      </details>
     </section>
   );
 }

@@ -161,6 +161,26 @@ test('uploaded files support suffix ranges and reject unsatisfiable ranges', asy
   assert.equal((await fetch(`${baseUrl}/api/rooms`)).status, 200);
 });
 
+test('rejoining a paused room receives the authoritative paused playback snapshot', async () => {
+  const host = await connect();
+  const guest = await connect();
+  const room = await roomFor(host);
+  await addTrack(host, room.id);
+  const played = eventFrom(host, 'playback:sync');
+  host.emit('playback:play', { roomId: room.id, trackIndex: 0, position: 8 });
+  await played;
+  const paused = eventFrom(host, 'playback:sync');
+  host.emit('playback:pause', { roomId: room.id });
+  const expected = await paused;
+  const restored = eventFrom(guest, 'playback:sync');
+  guest.emit('room:join', { roomId: room.id, username: 'Returning guest', userId: 'returning-guest' });
+  const actual = await restored;
+  assert.equal(actual.playing, false);
+  assert.equal(actual.position, expected.position);
+  assert.equal(actual.updatedAt, expected.updatedAt);
+  assert.equal(actual.snapshot, true);
+});
+
 test('Saavn proxy tracks are accepted into the queue', async () => {
   const host = await connect();
   const room = await roomFor(host);

@@ -11,6 +11,7 @@ import Player from './Player';
 import Queue from './Queue';
 import MembersPanel from './MembersPanel';
 import PlatformConnect from './PlatformConnect';
+import SoninLogo from './SoninLogo';
 import { Headphones, LogOut, Volume2, VolumeX, ListMusic, Music2 } from 'lucide-react';
 
 function Room({ socket, roomState, setRoomState, username, userId, onLeave, connected }) {
@@ -44,7 +45,7 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
   // wraps back to the first track when the queue ends.
   const handleTrackEnded = useCallback(() => {
     if (!isHost) return;
-    if (!socket || !roomState?.id) return;
+    if (!socket?.connected || !roomState?.id) return;
     socket.emit('playback:next', { roomId: roomState.id });
   }, [isHost, socket, roomState?.id]);
 
@@ -143,6 +144,7 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
 
   // Handle adding a streaming platform track to the queue
   const handlePlatformTrackSelected = (track) => {
+    if (!connected || !socket?.connected) return;
     // Was the queue empty before this add? If so, this is the "first song" —
     // start playing it immediately (inside the tap gesture, so mobile browsers
     // allow sound). Every later song just gets added to the queue.
@@ -580,7 +582,7 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
   }, [socket, roomState?.id]);
 
   const myMember = members.find(m => (userId ? m.userId === userId : m.id === socket?.id));
-  const canControl = isHost || mode === 'collaborative' || !!myMember?.canControl;
+  const canControl = connected && (isHost || mode === 'collaborative' || !!myMember?.canControl);
 
   // YouTube/Spotify tracks report progress via their own players, not the shared <audio>
   const activeTrack = queue[currentTrackIndex] || null;
@@ -724,7 +726,7 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
   };
 
   const handleModeChange = (newMode) => {
-    if (!isHost) return;
+    if (!isHost || !connected || !socket?.connected) return;
     socket.emit('room:set-mode', { roomId: roomState.id, mode: newMode });
   };
 
@@ -1027,17 +1029,7 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
       {/* Header */}
       <div className="room-header">
         <div className="room-header-left">
-          <div className="brand brand-inline">
-            <span className="brand-mark" aria-hidden="true">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="#0a0a0a">
-                <rect x="2" y="9" width="3" height="6" rx="1.5" />
-                <rect x="7" y="5.5" width="3" height="13" rx="1.5" />
-                <rect x="12" y="2" width="3" height="20" rx="1.5" />
-                <rect x="17" y="7" width="3" height="10" rx="1.5" />
-              </svg>
-            </span>
-            <span className="brand-name">Sonin</span>
-          </div>
+          <SoninLogo />
           <span className="header-divider" aria-hidden="true" />
           <div className="room-title-group">
             <span className="room-title-label">Listening Room</span>
@@ -1079,13 +1071,14 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
         <div className="room-toolbar">
           <div><span className="eyebrow">THE LISTENING ROOM</span><h1>Your next good listen.</h1></div>
           {isHost && <div className="mode-toggle" role="group" aria-label="Playback permissions">
-            <button className={mode === 'host' ? 'active' : ''} aria-pressed={mode === 'host'} onClick={() => handleModeChange('host')}>Host controls</button>
-            <button className={mode === 'collaborative' ? 'active' : ''} aria-pressed={mode === 'collaborative'} onClick={() => handleModeChange('collaborative')}>Everyone</button>
+            <button className={mode === 'host' ? 'active' : ''} aria-pressed={mode === 'host'} disabled={!connected} onClick={() => handleModeChange('host')}>Host controls</button>
+            <button className={mode === 'collaborative' ? 'active' : ''} aria-pressed={mode === 'collaborative'} disabled={!connected} onClick={() => handleModeChange('collaborative')}>Everyone</button>
           </div>}
         </div>
         {copyError && <p className="form-error" role="status">{copyError}</p>}
         {!audioEnabled && <div className="audio-enable-bar"><Headphones size={20} /><span>Audio on this device is off</span><button className="btn btn-primary" onClick={handleEnableAudio}>Enable audio</button></div>}
         <PlatformConnect
+          connected={connected}
           spotify={spotify}
           youtube={youtube}
           audius={audius}
@@ -1114,6 +1107,7 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
 
       {/* Sliding Members & Chat Panel */}
       <MembersPanel
+        connected={connected}
         members={members}
         hostId={roomState.hostId}
         hostUserId={roomState.hostUserId}

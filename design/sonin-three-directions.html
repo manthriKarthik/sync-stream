@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sonin / Three Identity Directions</title>
+  <style>
+    @font-face { font-family: Manrope; src: url('sonin-manrope.ttf') format('truetype'); font-weight: 200 800; font-display: block; }
+    * { box-sizing: border-box; }
+    :root { color-scheme: light; font-family: Manrope, sans-serif; color: #19191b; background: #f1f1f3; letter-spacing: 0; }
+    body { margin: 0; }
+    header { padding: 32px 4%; display: flex; justify-content: space-between; align-items: center; gap: 24px; }
+    header strong { font-size: 20px; font-weight: 800; }
+    header span { font-size: 11px; color: #6c6d75; text-align: right; }
+    main { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .direction { min-width: 0; padding: 28px 34px 30px; }
+    .prism { background: #e9edf3; }
+    .pulse { background: #151519; color: #fff; }
+    .unison { background: #fcfcfc; }
+    .heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .heading h2 { margin: 0; font-size: 12px; font-weight: 700; }
+    .heading span { font-size: 10px; opacity: .55; }
+    .primary { height: 344px; display: flex; align-items: center; justify-content: center; flex-direction: column; }
+    .primary > img { width: 178px; height: 178px; object-fit: contain; }
+    .prism .primary > img { filter: drop-shadow(0 16px 17px #40557623); }
+    .word { margin: 23px 0 0; font-size: 46px; line-height: 1.15; font-weight: 600; }
+    .pulse .word { font-weight: 800; }
+    .unison .word { font-weight: 750; font-size: 35px; margin-top: 28px; }
+    .rules { border-top: 1px solid #80808a35; border-bottom: 1px solid #80808a35; height: 105px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .signature { display: flex; align-items: center; gap: 7px; }
+    .signature img { width: 32px; height: 32px; }
+    .signature span { font-size: 20px; font-weight: 700; }
+    .unison .signature span { font-size: 16px; font-weight: 750; }
+    .scale { display: flex; align-items: center; gap: 12px; }
+    .scale img:first-child { width: 28px; height: 28px; }
+    .scale img:last-child { width: 16px; height: 16px; }
+    .palette { display: flex; gap: 7px; margin: 25px 0 17px; }
+    .palette i { width: 24px; height: 8px; border-radius: 2px; background: var(--colour); border: 1px solid #80808a20; }
+    .description { margin: 0; font-size: 11px; opacity: .65; line-height: 1.8; }
+    .colour-names { margin: 5px 0 0; font-size: 10px; opacity: .5; line-height: 1.8; }
+    .flat { height: 91px; display: flex; align-items: center; justify-content: space-between; margin-top: 18px; border-top: 1px solid #80808a35; }
+    .flat span { font-size: 10px; opacity: .6; }
+    .flat svg, .flat img { width: 46px; height: 46px; }
+    .pulse .flat svg { fill: white; }
+    footer { padding: 23px 4%; display: flex; justify-content: space-between; gap: 20px; font-size: 10px; color: #72727a; }
+    footer a { color: inherit; text-underline-offset: 3px; }
+    @media (max-width: 900px) and (min-width: 681px) { .direction { padding: 24px 18px; } .signature span { font-size: 17px; } .scale { gap: 6px; } }
+    @media (max-width: 680px) {
+      header { padding: 25px 24px; }
+      header span { max-width: 160px; line-height: 1.7; }
+      main { grid-template-columns: 1fr; }
+      .direction { padding: 26px 30px 8px; }
+      .primary { height: 314px; }
+      .primary > img { width: 166px; height: 166px; }
+      .rules { height: 85px; }
+      .flat { height: 78px; }
+      footer { padding: 24px; flex-wrap: wrap; }
+    }
+  </style>
+</head>
+<body>
+  <header><strong>sonin</strong><span>Three directions. One listening experience.</span></header>
+  <main>
+    <section class="direction prism" aria-label="Direction 1: Prism, liquid glass">
+      <div class="heading"><h2>01 / PRISM</h2><span>Liquid glass</span></div>
+      <div class="primary"><img src="sonin-prism.svg" alt="Frosted silver folded S on a pearl glass app icon"><div class="word">sonin</div></div>
+      <div class="rules"><div class="signature"><img src="sonin-prism.svg" alt="Prism compact signature"><span>sonin</span></div><div class="scale"><img src="sonin-prism.svg" alt="Prism at 28 pixels"><img src="sonin-prism.svg" alt="Prism at 16 pixels"></div></div>
+      <div class="palette"><i style="--colour:#e9edf3"></i><i style="--colour:#b6c9e1"></i><i style="--colour:#526788"></i><i style="--colour:#19191b"></i></div>
+      <p class="description">Sculpted ribbon. Soft light. Quiet typography.</p><p class="colour-names">Pearl / glacier / steel / ink</p>
+      <div class="flat"><span>One-colour master</span><svg viewBox="0 0 256 256" role="img" aria-label="Prism S in black"><path fill="currentColor" d="M181 56H105C83 56 68 70 68 89C68 103 77 114 94 123L151 153C158 157 157 164 148 164H73V200H153C178 200 194 185 194 165C194 150 186 139 167 129L111 100C104 96 105 90 114 90H181Z"/></svg></div>
+    </section>
+    <section class="direction pulse" aria-label="Direction 2: Pulse, bold music brand">
+      <div class="heading"><h2>02 / PULSE</h2><span>Bold music brand</span></div>
+      <div class="primary"><img src="sonin-pulse.svg" alt="White forward-cut S monogram on a vivid rose app icon"><div class="word">sonin</div></div>
+      <div class="rules"><div class="signature"><img src="sonin-pulse.svg" alt="Pulse compact signature"><span>sonin</span></div><div class="scale"><img src="sonin-pulse.svg" alt="Pulse at 28 pixels"><img src="sonin-pulse.svg" alt="Pulse at 16 pixels"></div></div>
+      <div class="palette"><i style="--colour:#ff3158"></i><i style="--colour:#ffd1da"></i><i style="--colour:#ffffff"></i><i style="--colour:#151519"></i></div>
+      <p class="description">Forward-cut S. High contrast. Bold typography.</p><p class="colour-names">Electric rose / blush / white / carbon</p>
+      <div class="flat"><span>One-colour master</span><svg viewBox="0 0 256 256" role="img" aria-label="Pulse S in white"><path fill-rule="evenodd" d="M187 54H108C80 54 63 72 63 96C63 115 74 127 96 138L139 158H69V200H150C178 200 195 182 195 158C195 139 184 127 162 116L119 96H187ZM147 58 179 75 147 92ZM109 162 77 179 109 196Z"/></svg></div>
+    </section>
+    <section class="direction unison" aria-label="Direction 3: Unison, minimal luxury">
+      <div class="heading"><h2>03 / UNISON</h2><span>Minimal luxury</span></div>
+      <div class="primary"><img src="sonin-unison.svg" alt="Black circular seal with opposing white sound forms"><div class="word">SONIN</div></div>
+      <div class="rules"><div class="signature"><img src="sonin-unison.svg" alt="Unison compact signature"><span>SONIN</span></div><div class="scale"><img src="sonin-unison.svg" alt="Unison at 28 pixels"><img src="sonin-unison.svg" alt="Unison at 16 pixels"></div></div>
+      <div class="palette"><i style="--colour:#19191b"></i><i style="--colour:#74747c"></i><i style="--colour:#d9d9de"></i><i style="--colour:#fcfcfc"></i></div>
+      <p class="description">Opposing sound forms. A monochrome seal.</p><p class="colour-names">Obsidian / pewter / silver / porcelain</p>
+      <div class="flat"><span>One-colour master</span><img src="sonin-unison.svg" alt="Unison monochrome master"></div>
+    </section>
+  </main>
+  <footer><span>SONIN / Concept studies</span><a href="sonin-three-directions.png">Full-resolution comparison</a></footer>
+</body>
+</html>

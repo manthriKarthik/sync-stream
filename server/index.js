@@ -750,10 +750,13 @@ io.on('connection', (socket) => {
       const elapsed = (syncTime - room.playbackState.startedAt) / 1000;
       socket.emit('playback:sync', {
         ...room.playbackState,
+        snapshot: true,
         position: (room.playbackState.position || 0) + Math.max(0, elapsed),
         startedAt: syncTime,
         syncTime
       });
+    } else if (room.playbackState) {
+      socket.emit('playback:sync', { ...room.playbackState, snapshot: true });
     }
   });
 

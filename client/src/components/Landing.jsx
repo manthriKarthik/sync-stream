@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { ArrowRight, AudioLines, Plus, Users } from 'lucide-react';
 import ArtistShowcase from './ArtistShowcase';
+import ImageLicenses from './ImageLicenses';
+import SoninLogo from './SoninLogo';
 
 function Landing({ onCreateRoom, onJoinRoom, connected, pending, error }) {
   const [username, setUsername] = useState('');
@@ -24,7 +26,7 @@ function Landing({ onCreateRoom, onJoinRoom, connected, pending, error }) {
   return (
     <main className="studio-entry">
       <header className="entry-header">
-        <a className="studio-brand" href="/" aria-label="Sonin home"><AudioLines size={26} /> Sonin<span className="brand-period">.</span></a>
+        <a className="studio-brand" href="/" aria-label="Sonin home"><SoninLogo /></a>
         <span className={`connection-status ${connected ? 'online' : ''}`} role="status"><span />{connected ? 'Ready to connect' : 'Connecting to server'}</span>
       </header>
       <div className="entry-content">
@@ -60,7 +62,7 @@ function Landing({ onCreateRoom, onJoinRoom, connected, pending, error }) {
           </section>
         </div>
       </div>
-      <footer className="entry-footer"><span>A little closer. One song at a time.</span><span><AudioLines size={16} />Made for listening together</span></footer>
+      <footer className="entry-footer"><span>A little closer. One song at a time.</span><ImageLicenses /><span><AudioLines size={16} />Made for listening together</span></footer>
     </main>
   );
 }

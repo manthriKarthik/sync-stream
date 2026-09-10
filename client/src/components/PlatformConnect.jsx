@@ -12,7 +12,7 @@ const TABS = [
   { id: 'upload', label: 'Upload' }
 ];
 
-function PlatformConnect({ spotify, youtube, audius, saavn, soundcloud, roomId, userId, onTrackSelected, canControl, queueEmpty }) {
+function PlatformConnect({ spotify, youtube, audius, saavn, soundcloud, roomId, userId, onTrackSelected, canControl, queueEmpty, connected }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [addedIds, setAddedIds] = useState(() => new Set());
@@ -71,6 +71,7 @@ function PlatformConnect({ spotify, youtube, audius, saavn, soundcloud, roomId, 
   };
 
   const handleSelectTrack = (track) => {
+    if (!connected) return;
     onTrackSelected(track);
     // Mark this song as added so the button shows a green "Added" state; the
     // user can still add it again via the "Add again" button.
@@ -87,7 +88,7 @@ function PlatformConnect({ spotify, youtube, audius, saavn, soundcloud, roomId, 
   // Add YouTube track by URL
   const handleYoutubeUrl = (e) => {
     e.preventDefault();
-    if (!youtubeUrl.trim()) return;
+    if (!connected || !youtubeUrl.trim()) return;
     const videoId = youtube.extractVideoId(youtubeUrl.trim());
     if (videoId) {
       onTrackSelected({
@@ -280,7 +281,7 @@ function PlatformConnect({ spotify, youtube, audius, saavn, soundcloud, roomId, 
               onChange={(e) => setYoutubeUrl(e.target.value)}
               style={{ fontSize: 12 }}
             />
-            <button className="btn btn-secondary" type="submit" style={{ whiteSpace: 'nowrap', fontSize: 12 }}>
+            <button className="btn btn-secondary" type="submit" disabled={!connected} style={{ whiteSpace: 'nowrap', fontSize: 12 }}>
               + Add
             </button>
           </form>
@@ -355,7 +356,7 @@ function PlatformConnect({ spotify, youtube, audius, saavn, soundcloud, roomId, 
           <p style={{ fontSize: 12, color: 'var(--success)', marginBottom: 12 }}>
             ✓ Play your own audio files • synced for everyone
           </p>
-          <Upload roomId={roomId} userId={userId} />
+          <Upload roomId={roomId} userId={userId} connected={connected} />
         </div>
       )}
 
@@ -419,6 +420,7 @@ function PlatformConnect({ spotify, youtube, audius, saavn, soundcloud, roomId, 
                   <button
                     onClick={(e) => { e.stopPropagation(); handleSelectTrack(track); }}
                     title="Add this song to the queue again"
+                    disabled={!connected}
                     style={{
                       padding: '4px 8px',
                       fontSize: 11,
@@ -438,6 +440,7 @@ function PlatformConnect({ spotify, youtube, audius, saavn, soundcloud, roomId, 
                 <button
                   className="btn btn-primary"
                   onClick={(e) => { e.stopPropagation(); handleSelectTrack(track); }}
+                  disabled={!connected}
                   style={{ padding: '4px 10px', fontSize: 11 }}
                 >
                   {queueEmpty && canControl ? '▶ Play' : '+ Add'}

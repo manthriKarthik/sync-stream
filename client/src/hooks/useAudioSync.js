@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import Hls from 'hls.js';
-import { isUnchangedSnapshot, measureClockOffset, driftPlaybackRate } from './playbackSync';
+import { isUnchangedSnapshot, measureClockOffset, driftPlaybackRate, SOFT_DRIFT_LIMIT } from './playbackSync';
 
 /**
  * Audio synchronization engine - v2 (optimized for remote/cross-network sync).
@@ -186,7 +186,7 @@ export function useAudioSync(socket, onEnded) {
 
       if (isIOS) {
         // iOS: no rate changes. Only correct really large drift, and rarely.
-        if (absDrift >= 2.5 && Date.now() - lastHardSeekRef.current > 12000) {
+        if (absDrift >= SOFT_DRIFT_LIMIT && Date.now() - lastHardSeekRef.current > 12000) {
           lastHardSeekRef.current = Date.now();
           audio.currentTime = expectedPosition;
         }
@@ -195,7 +195,7 @@ export function useAudioSync(socket, onEnded) {
 
       // Small/medium drift: nudge the playback rate to converge smoothly with
       // NO audible gap.
-      if (absDrift < 2.5) {
+      if (absDrift < SOFT_DRIFT_LIMIT) {
         audio.playbackRate = driftPlaybackRate(drift);
       }
       // Large drift: hard seek — but at most once every 6s so a persistent
@@ -230,7 +230,12 @@ export function useAudioSync(socket, onEnded) {
         if (!audio.paused) audio.pause();
         return;
       }
-      const preservePlayback = isUnchangedSnapshot(playbackStateRef.current, state) && !audio.paused;
+      if (audio.error && audio.src) {
+        audio.load();
+        recentLoadRef.current = Date.now();
+      }
+      const unchanged = isUnchangedSnapshot(playbackStateRef.current, state);
+      const preservePlayback = unchanged && !audio.paused;
       playbackStateRef.current = state;
       if (preservePlayback) return;
 
@@ -243,7 +248,7 @@ export function useAudioSync(socket, onEnded) {
           // Seek to correct position. Use a wider tolerance so tiny differences
           // don't trigger a seek (each seek rebuffers on iOS -> audible cut).
           const drift = Math.abs(audio.currentTime - targetPosition);
-          if (drift > 0.75) {
+          if (drift > (unchanged ? SOFT_DRIFT_LIMIT : 0.75)) {
             audio.currentTime = targetPosition;
           }
 
@@ -386,7 +391,7 @@ export function useAudioSync(socket, onEnded) {
       const syncedNow = Date.now() + clockOffsetRef.current;
       const elapsed = state.syncTime ? (syncedNow - state.syncTime) / 1000 : 0;
       const target = state.position + Math.max(0, elapsed);
-      if (Number.isFinite(target) && Math.abs(a.currentTime - target) > 0.75) {
+      if (Number.isFinite(target) && Math.abs(a.currentTime - target) > SOFT_DRIFT_LIMIT) {
         try { a.currentTime = target; } catch (_) { /* ignore */ }
       }
     }

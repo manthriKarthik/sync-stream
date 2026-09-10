@@ -14,7 +14,8 @@ export function useSocket({ onRoomState, onRoomCreated, onError }) {
     const socket = io({
       transports: ['polling', 'websocket'],
       reconnection: true,
-      reconnectionDelay: 1000
+      reconnectionDelay: 1000,
+      autoConnect: navigator.onLine
     });
 
     socketRef.current = socket;
@@ -26,7 +27,17 @@ export function useSocket({ onRoomState, onRoomCreated, onError }) {
     socket.on('room:created', (room) => callbacksRef.current.onRoomCreated(room));
     socket.on('error', (err) => callbacksRef.current.onError(err));
 
+    const handleOffline = () => {
+      setConnected(false);
+      socket.disconnect();
+    };
+    const handleOnline = () => socket.connect();
+    window.addEventListener('offline', handleOffline);
+    window.addEventListener('online', handleOnline);
+
     return () => {
+      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('online', handleOnline);
       socket.disconnect();
     };
   }, []);

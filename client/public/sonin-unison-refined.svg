@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2048" height="2048" viewBox="0 0 256 256" fill="none" role="img" aria-labelledby="title desc">
+  <title id="title">Sonin Unison, refined master</title>
+  <desc id="desc">Two balanced, opposing sound forms inside a graphite circle, separated by a flowing negative space.</desc>
+  <circle cx="128" cy="128" r="120" fill="#191A1E"/>
+  <path d="M190 96C179 62 142 47 109 59C78 70 64 99 72 124C91 103 113 97 137 106C160 114 178 111 190 96Z" fill="#FAFBFC"/>
+  <path d="M190 96C179 62 142 47 109 59C78 70 64 99 72 124C91 103 113 97 137 106C160 114 178 111 190 96Z" fill="#FAFBFC" transform="rotate(180 128 128)"/>
+</svg>

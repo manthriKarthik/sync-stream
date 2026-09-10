@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title">
+  <title id="title">Sonin Pulse: forward-cut S monogram</title>
+  <path fill="#FF3158" d="M87 2H169C230 2 254 26 254 87V169C254 230 230 254 169 254H87C26 254 2 230 2 169V87C2 26 26 2 87 2Z"/>
+  <path fill="#FFFFFF" d="M187 54H108C80 54 63 72 63 96C63 115 74 127 96 138L139 158H69V200H150C178 200 195 182 195 158C195 139 184 127 162 116L119 96H187Z"/>
+  <path fill="#FF3158" d="M147 58 179 75 147 92ZM109 162 77 179 109 196Z"/>
+</svg>

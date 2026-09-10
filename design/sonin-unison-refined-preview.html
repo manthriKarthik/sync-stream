@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sonin / Unison Refined</title>
+  <style>
+    @font-face { font-family: Manrope; src: url('sonin-manrope.ttf') format('truetype'); font-weight: 200 800; font-display: block; }
+    :root { color-scheme: light; --ink: #191a1e; --paper: #f5f6f8; --muted: #737881; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Manrope, sans-serif; letter-spacing: 0; background: var(--paper); color: var(--ink); }
+    header { max-width: 1280px; margin: auto; padding: 28px 48px; display: flex; justify-content: space-between; align-items: center; gap: 20px; }
+    header strong { font-size: 19px; font-weight: 650; }
+    header span { font-size: 11px; color: var(--muted); text-align: right; }
+    .hero { display: flex; align-items: center; flex-direction: column; padding: 18px 24px 47px; background: linear-gradient(180deg, #fff0, #ffffffb0 60%, #fff0); }
+    .hero > img { width: 236px; height: 236px; filter: drop-shadow(0 14px 14px #2637491c); }
+    h1 { font-size: 61px; font-weight: 550; line-height: 1.1; margin: 16px 0 0; }
+    .hero p { font-size: 12px; color: var(--muted); margin: 13px 0 0; }
+    .applications { max-width: 1184px; margin: auto; display: grid; grid-template-columns: 1.05fr 1fr 1fr; border-top: 1px solid #dce0e5; border-bottom: 1px solid #dce0e5; }
+    .sample { min-width: 0; min-height: 224px; display: flex; align-items: center; justify-content: center; position: relative; padding: 30px 22px 60px; }
+    .sample + .sample { border-left: 1px solid #dce0e5; }
+    .label { position: absolute; bottom: 21px; font-size: 10px; color: var(--muted); }
+    .lockup { display: flex; gap: 10px; align-items: center; }
+    .lockup img { width: 53px; height: 53px; }
+    .lockup span { font-size: 35px; line-height: 1; font-weight: 550; }
+    .app-tile { width: 112px; height: 112px; border-radius: 25px; display: grid; place-items: center; background: linear-gradient(145deg, #fff 2%, #e6edf5 48%, #bac9dd 100%); border: 1px solid #ffffffb0; box-shadow: 0 8px 18px #31486020, inset 0 -2px 4px #8b9db832; }
+    .app-tile img { width: 84%; height: 84%; }
+    .night { background: #1b1d22; }
+    .night .label { color: #b7bcc6; }
+    .sizes { display: flex; align-items: center; gap: 20px; }
+    .sizes img { width: 65px; height: 65px; }
+    .sizes img:nth-child(2) { width: 32px; height: 32px; }
+    .sizes img:nth-child(3) { width: 16px; height: 16px; }
+    .details { max-width: 1280px; margin: auto; padding: 28px 48px; display: flex; justify-content: space-between; align-items: center; gap: 24px; }
+    .palette { display: flex; flex-wrap: wrap; gap: 20px; }
+    .colour { display: flex; align-items: center; gap: 8px; font-size: 10px; }
+    .colour i { width: 17px; height: 17px; background: var(--colour); border-radius: 50%; border: 1px solid #191a1e18; }
+    .type { font-size: 10px; color: var(--muted); }
+    footer { max-width: 1280px; margin: auto; display: flex; justify-content: space-between; gap: 20px; padding: 0 48px 25px; color: var(--muted); font-size: 10px; }
+    footer nav { display: flex; gap: 18px; flex-wrap: wrap; }
+    footer a { color: inherit; text-underline-offset: 4px; }
+    @media (max-width: 680px) {
+      header { padding: 23px; }
+      header span { max-width: 165px; line-height: 1.7; font-size: 10px; }
+      .hero { padding: 24px 20px 36px; }
+      .hero > img { width: 192px; height: 192px; }
+      h1 { font-size: 51px; }
+      .applications { grid-template-columns: 1fr 1fr; margin: 0 20px; }
+      .sample { min-height: 190px; padding: 24px 12px 55px; }
+      .sample:last-child { grid-column: 1 / -1; min-height: 160px; border-left: 0; }
+      .lockup { gap: 4px; }
+      .lockup img { width: 36px; height: 36px; }
+      .lockup span { font-size: 27px; }
+      .app-tile { width: 96px; height: 96px; border-radius: 22px; }
+      .details { padding: 26px 23px; flex-direction: column; align-items: flex-start; }
+      .palette { gap: 15px; }
+      footer { padding: 0 23px 24px; flex-wrap: wrap; }
+    }
+  </style>
+</head>
+<body>
+  <header><strong>sonin</strong><span>Unison / Pearl edition</span></header>
+  <main>
+    <section class="hero" aria-label="Refined Sonin identity">
+      <img src="sonin-unison-glass.svg" alt="Sonin circular mark with silver edges and two opposing pearl-glass sound forms">
+      <h1>sonin</h1>
+      <p>In sound. Together.</p>
+    </section>
+    <section class="applications" aria-label="Logo applications">
+      <div class="sample"><div class="lockup"><img src="sonin-unison-refined.svg" alt="Sonin flat master"><span>sonin</span></div><span class="label">Primary signature</span></div>
+      <div class="sample"><div class="app-tile"><img src="sonin-unison-glass.svg" alt="Pearl Sonin app icon"></div><span class="label">Pearl app icon</span></div>
+      <div class="sample night"><div class="sizes"><img src="sonin-unison-glass.svg" alt="Glass symbol at 65 pixels"><img src="sonin-unison-refined.svg" alt="Flat symbol at 32 pixels"><img src="sonin-unison-refined.svg" alt="Flat symbol at 16 pixels"></div><span class="label">65 / 32 / 16 px</span></div>
+    </section>
+    <section class="details" aria-label="Colour and typography">
+      <div class="palette"><span class="colour"><i style="--colour:#f5f6f8"></i>Pearl</span><span class="colour"><i style="--colour:#c6d4e4"></i>Glacier</span><span class="colour"><i style="--colour:#737e91"></i>Silver</span><span class="colour"><i style="--colour:#191a1e"></i>Graphite</span></div>
+      <span class="type">Manrope / Medium</span>
+    </section>
+  </main>
+  <footer><span>Sonin / Refined concept</span><nav aria-label="Download artwork"><a href="sonin-unison-glass.svg" download>Glass SVG</a><a href="sonin-unison-refined.svg" download>Flat SVG</a><a href="sonin-unison-glass-2048.png" download>2048px PNG</a><a href="sonin-unison-app-1024.png" download>App icon</a></nav></footer>
+</body>
+</html>
