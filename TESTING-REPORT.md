@@ -69,7 +69,7 @@ of empty results. A provider integration update is still needed.
   Long interruptions may require seeking to catch up with the room.
 - Physical network loss without an OS offline event still relies on transport
   error/heartbeat detection; browser connectivity detection is not infallible.
-- Spotify Premium/OAuth, live YouTube playback, HLS recovery, microphone/WebRTC,
+- Live YouTube playback, HLS recovery, microphone/WebRTC,
   and cross-device Bluetooth timing require authenticated/provider/device tests.
 - Server restarts discard in-memory rooms. Server-restart recovery, very long
   outages, media stalls without an error event, and load/soak testing are not

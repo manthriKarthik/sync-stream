@@ -69,6 +69,22 @@ after(async () => {
   }
 });
 
+test('removed Spotify source cannot be queued and its token API is unavailable', async () => {
+  const host = await connect();
+  const room = await roomFor(host);
+  host.emit('queue:add-platform-track', {
+    roomId: room.id,
+    track: { id: 'removed-source', name: 'Removed source', platform: 'spotify', uri: 'spotify:track:test' }
+  });
+  const queue = await addTrack(host, room.id);
+  assert.equal(queue.length, 1);
+  assert.equal(queue[0].platform, 'youtube');
+  const config = await fetch(`${baseUrl}/api/platforms/config`).then(response => response.json());
+  assert.equal(Object.hasOwn(config, 'spotify'), false);
+  const token = await fetch(`${baseUrl}/api/platforms/spotify/token`, { method: 'POST' });
+  assert.equal(token.status, 404);
+});
+
 test('pausing idle or already-paused playback never advances position', async () => {
   const host = await connect();
   const room = await roomFor(host);

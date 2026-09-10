@@ -6,7 +6,7 @@ function Queue({ queue, currentIndex, onSelect, onRemove, canControl }) {
       <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>
         <p style={{ fontSize: 32, marginBottom: 12 }}>🎶</p>
         <p>No tracks in queue yet.</p>
-        <p style={{ fontSize: 12 }}>Upload audio files, connect Spotify/Apple Music, or start live capture.</p>
+        <p style={{ fontSize: 12 }}>Upload audio files or add tracks from the music library.</p>
       </div>
     );
   }

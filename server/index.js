@@ -13,7 +13,6 @@ import 'dotenv/config';
 import { YouTube } from 'youtube-sr';
 import { RoomManager } from './rooms.js';
 import { ClockSyncHandler } from './sync.js';
-import { createSpotifyTokenHandler } from './spotify.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -134,18 +133,12 @@ app.get('/api/rooms', (req, res) => {
 // Platform configuration endpoint (provides client IDs to frontend securely)
 app.get('/api/platforms/config', (req, res) => {
   res.json({
-    spotify: {
-      clientId: process.env.SPOTIFY_CLIENT_ID || null,
-      available: !!process.env.SPOTIFY_CLIENT_ID
-    },
     apple: {
       developerToken: process.env.APPLE_MUSIC_DEVELOPER_TOKEN || null,
       available: !!process.env.APPLE_MUSIC_DEVELOPER_TOKEN
     }
   });
 });
-
-app.post('/api/platforms/spotify/token', createSpotifyTokenHandler());
 
 // YouTube search.
 //
@@ -843,7 +836,7 @@ io.on('connection', (socket) => {
     const room = roomManager.getRoom(roomId);
     if (!room || !room.members[socket.id]) return;
     if (!track || typeof track.name !== 'string' || !track.name.trim()
-      || !['youtube', 'spotify', 'audius', 'saavn', 'soundcloud', 'gaana'].includes(track.platform)
+      || !['youtube', 'audius', 'saavn', 'soundcloud', 'gaana'].includes(track.platform)
       || (track.url != null && (typeof track.url !== 'string'
         || (!/^https?:\/\//i.test(track.url)
           && !(track.platform === 'saavn' && track.url.startsWith('/api/saavn/stream?')))))
@@ -856,7 +849,7 @@ io.on('connection', (socket) => {
       album: track.album,
       albumArt: track.albumArt,
       uri: track.uri,
-      url: track.url || null, // Audius provides a direct stream URL; Spotify/YT don't
+      url: track.url || null, // Audius provides a direct stream URL; YouTube doesn't
       duration: track.duration,
       platform: track.platform,
       addedBy: room.members[socket.id].username

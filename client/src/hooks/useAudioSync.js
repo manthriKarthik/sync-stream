@@ -49,7 +49,7 @@ export function useAudioSync(socket, onEnded) {
   const clockOffsetRef = useRef(0);
   clockOffsetRef.current = clockOffset;
   // Whether the CURRENTLY active track uses this shared <audio> element
-  // (Audius / uploads). When a YouTube/Spotify track is active this is false,
+  // (Audius / uploads). When a YouTube track is active this is false,
   // so we ignore playback:sync and keep the shared element silent — otherwise
   // the previously-loaded local song would replay on top of the platform one.
   const activeIsSharedRef = useRef(true);
@@ -224,7 +224,7 @@ export function useAudioSync(socket, onEnded) {
 
     const handlePlaybackSync = (state) => {
       const audio = audioRef.current;
-      // If the active track plays through a platform SDK (YouTube/Spotify),
+      // If the active track plays through a platform SDK (YouTube),
       // keep the shared element silent so two songs never overlap.
       if (!activeIsSharedRef.current) {
         if (!audio.paused) audio.pause();
@@ -431,7 +431,7 @@ export function useAudioSync(socket, onEnded) {
   }, []);
 
   // Tell the engine whether the active track uses this shared <audio> element.
-  // When set to false (a YouTube/Spotify track is active) the shared element is
+  // When set to false (a YouTube track is active) the shared element is
   // paused and playback:sync events are ignored until it's shared again.
   const setSharedActive = useCallback((isShared) => {
     activeIsSharedRef.current = !!isShared;

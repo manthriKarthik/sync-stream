@@ -11,13 +11,6 @@ function PlatformLogo({ platform, size = 18 }) {
           <path fill="#fff" d="M9.6 15.6V8.4l6.2 3.6z" />
         </svg>
       );
-    case 'spotify':
-      return (
-        <svg width={s} height={s} viewBox="0 0 24 24" aria-hidden="true">
-          <circle cx="12" cy="12" r="12" fill="#1DB954" />
-          <path fill="#000" d="M17.6 10.9C14.6 9.1 9.6 8.9 6.7 9.8a.9.9 0 1 1-.5-1.7c3.3-1 8.8-.8 12.2 1.3a.9.9 0 0 1-.8 1.5zm-.1 2.7c-.3.4-.7.6-1.1.3-2.5-1.5-6.3-2-9.2-1.1a.75.75 0 0 1-.4-1.4c3.4-1 7.6-.5 10.5 1.3.3.2.4.6.2 1zm-1.2 2.5c-.2.3-.5.4-.8.2-2.2-1.3-4.9-1.6-8.1-.9a.63.63 0 1 1-.3-1.2c3.5-.8 6.5-.4 9 1.1.3.2.4.5.2.8z" />
-        </svg>
-      );
     case 'audius':
       return (
         <svg width={s} height={s} viewBox="0 0 24 24" aria-hidden="true">

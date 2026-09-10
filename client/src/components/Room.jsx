@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAudioSync } from '../hooks/useAudioSync';
 import { isUnchangedSnapshot } from '../hooks/playbackSync';
 import { useWebRTC } from '../hooks/useWebRTC';
-import { useSpotify } from '../hooks/useSpotify';
 import { useYouTube } from '../hooks/useYouTube';
 import { useAudius } from '../hooks/useAudius';
 import { useSaavn } from '../hooks/useSaavn';
@@ -22,7 +21,6 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
     roomState?.playbackState?.trackIndex || 0
   );
   const [audioEnabled, setAudioEnabled] = useState(false);
-  const [spotifyActivated, setSpotifyActivated] = useState(false);
   const [songAddedToast, setSongAddedToast] = useState(null); // { name, addedBy }
   const [codeCopied, setCodeCopied] = useState(false);
   const [copyError, setCopyError] = useState('');
@@ -65,7 +63,6 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
     clockOffset
   } = useAudioSync(socket, handleTrackEnded);
 
-  const spotify = useSpotify();
   const youtube = useYouTube(handleTrackEnded);
   const audius = useAudius();
   const saavn = useSaavn();
@@ -109,7 +106,6 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
   // leaves their YouTube player locked, so a later (auto-advanced) YouTube song
   // silently fails to play for them while other listeners hear it fine.
   const unlockPlaybackEngines = (currentPlatform) => {
-    try { spotify.activate(); } catch (_) { /* ignore */ }
     if (!audioEnabledRef.current) {
       // First playback gesture on this device. Prime the YouTube player (unless
       // we're about to start a YouTube track, which unlocks itself via
@@ -123,9 +119,9 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
     }
   };
   // Remembers the last user seek so polling holds the bar at the tapped spot
-  // until the platform player actually reports it (YouTube/Spotify seek async).
+  // until the platform player actually reports it (YouTube seeks asynchronously).
   const recentSeekRef = useRef({ time: 0, at: 0 });
-  // Reactive flag: is the room currently playing a platform (YouTube/Spotify)
+  // Reactive flag: is the room currently playing a platform (YouTube)
   // track? Used to decide whether to show the "tap to play" prompt.
   const [platformPlaying, setPlatformPlaying] = useState(false);
   const computePlatformPosition = (state) => {
@@ -169,7 +165,6 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
     if (isFirstSong && canControl) {
       // Play this first track right away within the user gesture and tell the
       // server/other devices to start it in sync at index 0.
-      spotify.activate();
       startTrackInGesture(track);
       socket.emit('playback:play', {
         roomId: roomState.id,
@@ -245,9 +240,9 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
         setCurrentTrackIndex(state.trackIndex);
         const nextTrack = queue[state.trackIndex];
         // Only feed the shared <audio> engine for direct-URL tracks (Audius /
-        // uploads). YouTube/Spotify play through their own SDKs and must NOT
+        // uploads). YouTube plays through its own SDK and must NOT
         // pollute the shared audio element or they interfere with each other.
-        if (nextTrack.url && nextTrack.platform !== 'youtube' && nextTrack.platform !== 'spotify') {
+        if (nextTrack.url && nextTrack.platform !== 'youtube') {
           // Don't reload a source that's already loaded (e.g. the controller
           // just started it inside the tap gesture) — reloading restarts the
           // audio and snaps the progress bar back to 0.
@@ -295,7 +290,7 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
   useEffect(() => {
     if (queue.length > 0 && queue[currentTrackIndex]) {
       const track = queue[currentTrackIndex];
-      if (track.platform === 'spotify' || track.platform === 'apple' || track.platform === 'youtube') {
+      if (track.platform === 'apple' || track.platform === 'youtube') {
         // Platform tracks are played via their respective SDKs
         // The sync event will trigger playback on each client
       } else if (track.url) {
@@ -312,21 +307,15 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
   }, [queue, currentTrackIndex, loadTrack]);
 
   // Enforce ONE active player at a time so two songs never overlap when
-  // switching between a local (Audius/upload) track and a YouTube/Spotify one.
+  // switching between a local (Audius/upload) track and a YouTube one.
   useEffect(() => {
     const track = queue[currentTrackIndex];
     if (!track) return;
-    const isShared = track.platform !== 'youtube' && track.platform !== 'spotify';
+    const isShared = track.platform !== 'youtube';
     // Silence/allow the shared <audio> engine based on the active track type.
     setSharedActive(isShared);
-    if (track.platform === 'youtube') {
-      try { spotify.pause(); } catch (_) { /* ignore */ }
-    } else if (track.platform === 'spotify') {
+    if (isShared) {
       try { youtube.pause(); } catch (_) { /* ignore */ }
-    } else {
-      // Local / Audius / upload: stop both platform players.
-      try { youtube.pause(); } catch (_) { /* ignore */ }
-      try { spotify.pause(); } catch (_) { /* ignore */ }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentTrackIndex, queue]);
@@ -346,14 +335,8 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
 
       const track = queue[state.trackIndex];
       if (!track) return; // queue not ready yet — applied by the effect below
-      if (track.platform === 'spotify' && !spotify.isConnected) return;
       pendingPlatformRef.current = null;
-      if (unchanged) {
-        if (track.platform === 'spotify' && state.playing) {
-          spotify.refreshPlayback(track.uri, computePlatformPosition(state) * 1000);
-        }
-        return;
-      }
+      if (unchanged) return;
 
       if (track.platform === 'youtube') {
         if (state.playing) {
@@ -366,22 +349,12 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
         } else {
           youtube.pause();
         }
-      } else if (track.platform === 'spotify' && spotify.isConnected) {
-        if (state.playing) {
-          // Skip if this device just started the track from a tap gesture —
-          // re-issuing playTrack now would restart it right after it began.
-          if (!justStartedInGesture(track.uri)) {
-            spotify.playTrack(track.uri, computePlatformPosition(state) * 1000);
-          }
-        } else {
-          spotify.pause();
-        }
       }
     };
 
     socket.on('playback:sync', handlePlatformSync);
     return () => socket.off('playback:sync', handlePlatformSync);
-  }, [socket, queue, spotify, youtube, clockOffset]);
+  }, [socket, queue, youtube, clockOffset]);
 
   // Apply any pending platform playback once the queue/track becomes available.
   // Fixes a device (2nd/3rd listener) that joined mid-song and received the
@@ -389,7 +362,7 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
   // frozen progress bar and no "tap to play" prompt.
   //
   // IMPORTANT: apply the pending sync only ONCE (clear the ref afterwards) and
-  // do NOT depend on the `youtube`/`spotify` objects — they are recreated on
+  // do NOT depend on the `youtube` object — it is recreated on
   // every render, which would make this effect re-fire ~4x/sec and constantly
   // re-seek the player, causing playback to stop right after it starts.
   useEffect(() => {
@@ -402,20 +375,16 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
       if (!justStartedInGesture(track.uri)) {
         youtube.playTrack(track.uri, computePlatformPosition(state));
       }
-    } else if (track.platform === 'spotify' && spotify.isConnected) {
-      if (!justStartedInGesture(track.uri)) {
-        spotify.playTrack(track.uri, computePlatformPosition(state) * 1000);
-      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [queue, currentTrackIndex, spotify.isConnected]);
+  }, [queue, currentTrackIndex]);
 
   // Poll the active platform player so the progress bar keeps moving for
-  // YouTube/Spotify tracks (they don't use the shared <audio> element).
+  // YouTube tracks (they don't use the shared <audio> element).
   const [platformProgress, setPlatformProgress] = useState({ time: 0, duration: 0 });
 
   // Whenever the active track changes, reset the progress bar to the start
-  // immediately (Spotify-style). Polling then keeps it moving. This also runs
+  // immediately. Polling then keeps it moving. This also runs
   // for listeners whose track changed via a sync event (not a local tap).
   useEffect(() => {
     const track = queue[currentTrackIndex];
@@ -431,7 +400,6 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
     const track = queue[currentTrackIndex];
     if (!track) return;
 
-    let cancelled = false;
     let intervalId;
 
     if (track.platform === 'youtube') {
@@ -465,28 +433,9 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
         if (dur > 0) t = Math.min(t, dur);
         setPlatformProgress({ time: t || 0, duration: dur });
       }, 250);
-    } else if (track.platform === 'spotify') {
-      intervalId = setInterval(async () => {
-        const p = await spotify.getPosition();
-        if (cancelled) return;
-        const state = platformStateRef.current;
-        const sk = recentSeekRef.current;
-        const seeking = Date.now() - sk.at < 1500;
-        const localSec = (typeof p === 'number' && p > 0) ? p / 1000 : null;
-        let t;
-        if (seeking && (localSec === null || Math.abs(localSec - sk.time) > 1.5)) {
-          t = sk.time;
-        } else {
-          t = localSec !== null ? localSec : (state ? computePlatformPosition(state) : 0);
-        }
-        const dur = track.duration ? track.duration / 1000 : 0;
-        if (dur > 0) t = Math.min(t, dur);
-        setPlatformProgress({ time: t || 0, duration: dur });
-      }, 500);
     }
 
     return () => {
-      cancelled = true;
       if (intervalId) clearInterval(intervalId);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -558,7 +507,7 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
   useEffect(() => {
     if (!audioEnabled) return;
     const track = queue[currentTrackIndex];
-    const isShared = track && !!track.url && track.platform !== 'youtube' && track.platform !== 'spotify';
+    const isShared = track && !!track.url && track.platform !== 'youtube';
     if (!isShared) return;
 
     const id = setInterval(() => {
@@ -584,9 +533,9 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
   const myMember = members.find(m => (userId ? m.userId === userId : m.id === socket?.id));
   const canControl = connected && (isHost || mode === 'collaborative' || !!myMember?.canControl);
 
-  // YouTube/Spotify tracks report progress via their own players, not the shared <audio>
+  // YouTube tracks report progress via their own player, not the shared <audio>
   const activeTrack = queue[currentTrackIndex] || null;
-  const isPlatformTrack = activeTrack?.platform === 'youtube' || activeTrack?.platform === 'spotify';
+  const isPlatformTrack = activeTrack?.platform === 'youtube';
 
   // When there is no active track (empty queue or the playing song was removed),
   // fully stop the shared audio and any platform player so the player bar does
@@ -595,7 +544,6 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
     if (!activeTrack) {
       try { stop(); } catch (_) { /* ignore */ }
       try { youtube.pause(); } catch (_) { /* ignore */ }
-      try { spotify.pause(); } catch (_) { /* ignore */ }
       setPlatformPlaying(false);
       setPlatformProgress({ time: 0, duration: 0 });
       lastLoadedUrlRef.current = null;
@@ -604,12 +552,10 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
 
   const handlePlay = () => {
     if (!canControl) return;
-    // Unlock the Spotify SDK audio element on this device (must be in a gesture)
-    spotify.activate();
     // Also unlock YouTube + enable the auto-resume loops so a YouTube track
     // resumes on this device even if it wasn't started by a direct tap.
     unlockPlaybackEngines(activeTrack?.platform);
-    // For YouTube/Spotify tracks the shared <audio> currentTime is meaningless,
+    // For YouTube tracks the shared <audio> currentTime is meaningless,
     // so resume from the real platform position instead of snapping to 0/stale.
     const position = isPlatformTrack
       ? (platformProgress.time || platformStateRef.current?.position || 0)
@@ -638,29 +584,20 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
     // auto-advanced track (esp. YouTube) plays on this device without a manual
     // tap, and so the auto-resume retry loops become active.
     unlockPlaybackEngines(track.platform);
-    // Snap the progress bar back to the start instantly (like Spotify) instead
+    // Snap the progress bar back to the start instantly instead
     // of leaving it at the previous song's position until polling catches up.
     setPlatformProgress({ time: 0, duration: track.duration ? track.duration / 1000 : 0 });
-    const isSharedTrack = !!track.url && track.platform !== 'youtube' && track.platform !== 'spotify';
+    const isSharedTrack = !!track.url && track.platform !== 'youtube';
     // Stop every OTHER engine right away so the previous song (which may run on a
     // different engine — e.g. switching a YouTube song to a Saavn one) doesn't
     // keep playing/overlapping during the socket round-trip. Only the engine for
     // the new track is left running.
     try { if (!isSharedTrack) setSharedActive(false); } catch (_) { /* ignore */ }
     if (track.platform !== 'youtube') { try { youtube.pause(); } catch (_) { /* ignore */ } }
-    if (track.platform !== 'spotify') { try { spotify.pause(); } catch (_) { /* ignore */ } }
 
     if (track.platform === 'youtube') {
       recentGestureLoadRef.current = { videoId: track.uri, at: Date.now() };
       youtube.playTrack(track.uri, 0, true);
-    } else if (track.platform === 'spotify') {
-      // Start Spotify on THIS device inside the tap gesture so the SDK audio
-      // element produces sound on mobile (Android/iOS require playback tied to
-      // a user interaction). Mark activated so the green prompt disappears.
-      recentGestureLoadRef.current = { videoId: track.uri, at: Date.now() };
-      setSpotifyActivated(true);
-      spotify.activate();
-      spotify.playTrack(track.uri, 0);
     } else if (isSharedTrack) {
       // Shared <audio> tracks (Saavn / Audius / SoundCloud / upload):
       // load + play the new source inside this gesture. Set lastLoadedUrlRef so
@@ -696,7 +633,6 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
 
   const handleNext = () => {
     if (!canControl || queue.length === 0) return;
-    spotify.activate();
     const nextIndex = (currentTrackIndex + 1) % queue.length;
     startTrackInGesture(queue[nextIndex]);
     socket.emit('playback:next', { roomId: roomState.id });
@@ -704,7 +640,6 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
 
   const handlePrev = () => {
     if (!canControl || queue.length === 0) return;
-    spotify.activate();
     const prevIndex = currentTrackIndex === 0 ? queue.length - 1 : currentTrackIndex - 1;
     startTrackInGesture(queue[prevIndex]);
     socket.emit('playback:play', {
@@ -716,7 +651,6 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
 
   const handleTrackSelect = (index) => {
     if (!canControl) return;
-    spotify.activate();
     startTrackInGesture(queue[index]);
     socket.emit('playback:play', {
       roomId: roomState.id,
@@ -751,16 +685,14 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
     volumeRef.current = value;
     setVolume(value);
     youtube.setVolume(value);
-    if (spotify.isConnected) spotify.setVolume(personalMuted ? 0 : value);
   };
 
   // Personal mute toggle — silence/​restore audio on THIS device only. The room
   // keeps playing for everyone else, so un-muting drops the listener straight
-  // back in sync. Works for every platform (shared <audio>, YouTube, Spotify).
+  // back in sync. Works for every platform (shared <audio>, YouTube).
   const applyPersonalMute = (muted) => {
     try { const a = audioRef.current; if (a) a.muted = muted; } catch (_) { /* ignore */ }
     try { if (muted) youtube.mute(); else youtube.unmute(); } catch (_) { /* ignore */ }
-    try { if (spotify.isConnected) spotify.setVolume(muted ? 0 : volumeRef.current); } catch (_) { /* ignore */ }
   };
   const togglePersonalMute = () => {
     setPersonalMuted((prev) => {
@@ -790,8 +722,6 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
     // play/pause. The window-level unlock handler already blesses the element.
     // Unlock the YouTube IFrame player (applies any pending synced track)
     youtube.unlock();
-    // Unlock the Spotify SDK audio element if already connected
-    spotify.activate();
     setAudioEnabled(true);
 
     // Start the currently-active track INSIDE this user gesture so mobile
@@ -801,13 +731,7 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
     const track = queue[currentTrackIndex];
     if (track?.platform === 'youtube' && ps?.playing) {
       youtube.playTrack(track.uri, computePlatformPosition(ps), true);
-    } else if (track?.platform === 'spotify' && ps?.playing && spotify.isConnected) {
-      // Start Spotify inside this gesture so the SDK produces sound on mobile,
-      // and mark it activated so the separate green prompt never appears.
-      setSpotifyActivated(true);
-      recentGestureLoadRef.current = { videoId: track.uri, at: Date.now() };
-      spotify.playTrack(track.uri, computePlatformPosition(ps) * 1000);
-    } else if (track?.url && track.platform !== 'spotify' && ps?.playing) {
+    } else if (track?.url && ps?.playing) {
       // Shared audio (Saavn / Audius / uploads): start it within this gesture
       // so mobile listeners actually hear it. Seek to the synced position first
       // so we join exactly where the room is, then play.
@@ -829,28 +753,6 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
     }
   };
 
-  // Explicitly activate the Spotify SDK audio element on this device.
-  // Needed for listeners who never press Play themselves.
-  // NOTE: we do NOT transfer playback here — on a shared Spotify account that
-  // would steal the stream from the other device and cause playback to bounce.
-  const handleActivateSpotify = () => {
-    spotify.activate();
-    setSpotifyActivated(true);
-    // Actually (re)start the current Spotify track on THIS device within the
-    // gesture. activateElement() only unlocks the audio element; without a fresh
-    // playTrack the already-in-progress song stays silent here (timer moves but
-    // no sound), which is the exact bug this prompt was failing to fix.
-    const ps = platformStateRef.current || roomState?.playbackState;
-    const track = queue[ps?.trackIndex ?? currentTrackIndex];
-    if (track?.platform === 'spotify' && ps?.playing && spotify.isConnected) {
-      recentGestureLoadRef.current = { videoId: track.uri, at: Date.now() };
-      spotify.playTrack(track.uri, computePlatformPosition(ps) * 1000);
-    }
-    if (socket && roomState?.id) {
-      socket.emit('playback:request-sync', { roomId: roomState.id });
-    }
-  };
-
   // Fallback: if the browser hard-blocks autoplay even after audio is enabled,
   // a single tap starts YouTube from within a user gesture (guaranteed allowed).
   const handleYouTubeTap = () => {
@@ -865,7 +767,7 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
   void handleYouTubeTap;
 
   // Stop ALL audio on this device before leaving, so nothing keeps playing
-  // after the user leaves the room (shared <audio>, YouTube, and Spotify).
+  // after the user leaves the room (shared <audio> and YouTube).
   const handleLeave = () => {
     try { stop(); } catch (_) { /* ignore */ }
     try {
@@ -873,7 +775,6 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
       if (a) { a.pause(); a.src = ''; }
     } catch (_) { /* ignore */ }
     try { youtube.stop(); } catch (_) { /* ignore */ }
-    try { spotify.pause(); } catch (_) { /* ignore */ }
     onLeave();
   };
 
@@ -932,8 +833,7 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
     };
   }, [queue, currentTrackIndex]);
 
-  // Reflect play/pause state to the OS lock screen (platform-aware so YouTube /
-  // Spotify tracks show the correct state too).
+  // Reflect play/pause state to the OS lock screen, including YouTube tracks.
   useEffect(() => {
     if (!('mediaSession' in navigator)) return;
     const nowPlaying = !activeTrack ? false : (isPlatformTrack ? platformPlaying : isPlaying);
@@ -993,31 +893,6 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
         <span>♪</span><span>♫</span><span>♩</span><span>♬</span>
       </div>
       {!connected && <div className="room-notice" role="status">Reconnecting to your room...</div>}
-      {/* Spotify device activation prompt (each device must be unlocked by a tap) */}
-      {audioEnabled && spotify.isConnected && !spotifyActivated && (
-        <div
-          style={{
-            position: 'fixed',
-            bottom: 100,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            zIndex: 9998,
-            background: '#1db954',
-            color: '#fff',
-            borderRadius: 999,
-            padding: '12px 24px',
-            boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            fontWeight: 600
-          }}
-          onClick={handleActivateSpotify}
-        >
-          🔊 Tap to enable Spotify sound on this device
-        </div>
-      )}
       {/* "Song added" pop-up — shown to everyone when someone adds to the queue */}
       {songAddedToast && (
         <div className="song-toast">
@@ -1079,7 +954,6 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
         {!audioEnabled && <div className="audio-enable-bar"><Headphones size={20} /><span>Audio on this device is off</span><button className="btn btn-primary" onClick={handleEnableAudio}>Enable audio</button></div>}
         <PlatformConnect
           connected={connected}
-          spotify={spotify}
           youtube={youtube}
           audius={audius}
           saavn={saavn}

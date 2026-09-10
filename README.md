@@ -48,28 +48,6 @@ npm run dev
 
 ## Tests And Validation
 
-### Spotify Account Access
-
-Each listener needs a separate Spotify Premium account. For a Spotify app in
-Development Mode, the owner must also add each listener's Spotify email in
-[Spotify Developer Dashboard](https://developer.spotify.com/dashboard) > the app >
-Settings > Users Management. Premium alone does not authorize access to the app;
-Spotify can allow login and still reject that user's API requests with HTTP 403.
-See [Spotify's quota-mode documentation](https://developer.spotify.com/documentation/web-api/concepts/quota-modes).
-
-Set `SPOTIFY_CLIENT_ID` on the server and register the exact callback URL in that
-Spotify app's settings, for example
-`https://sync-stream-tt45.onrender.com/callback/spotify` (no trailing slash).
-Deploy the client and server together, refresh Sonin, close old login popups,
-and start a fresh connection. An old authorization code cannot be retried.
-
-Token exchange and account verification now have a combined 15-second server
-deadline; the popup has a 25-second fallback. Account denial, popup blocking,
-SDK loading failure, and player connection failure produce retryable errors.
-Spotify tests mock OAuth and the player SDK; they do not certify real Premium
-playback or change dashboard permissions. Access-token refresh is not yet
-implemented, so an expired player session requires reconnecting Spotify.
-
 See [TESTING-REPORT.md](TESTING-REPORT.md) for the latest playback interruption,
 offline/reconnection checks, reproduced fixes, and remaining device/provider
 limits. Buffered audio can continue offline; streaming that needs new data
@@ -122,7 +100,7 @@ queue access checks, unique queue entries, upload validation, and HTTP ranges.
      Search response time is not the same as inter-device audio latency.
 
 - Tests use generated local audio and a controlled search response. Live external
-     provider catalogs, Spotify Premium authentication, real Bluetooth timing,
+     provider catalogs, real Bluetooth timing,
      Safari/iOS autoplay behavior, and microphone/WebRTC capture require separate
      device/account testing. Third-party services can change or be unavailable.
 - Rooms are in memory and disappear when the server restarts. Persistent browser
@@ -224,7 +202,7 @@ sync-stream/
 
 ## Future Enhancements
 
-- [ ] Spotify/YouTube integration via their APIs
+- [ ] YouTube integration via its APIs
 - [ ] Persistent rooms with authentication
 - [ ] Visualizer / waveform display
 - [ ] Chat within rooms
