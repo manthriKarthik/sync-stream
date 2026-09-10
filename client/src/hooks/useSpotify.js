@@ -13,9 +13,12 @@ export function useSpotify() {
   const [token, setToken] = useState(null);
   const [currentTrack, setCurrentTrack] = useState(null);
   const [error, setError] = useState(null);
+  const [isConnecting, setIsConnecting] = useState(false);
+  const playerRef = useRef(null);
 
   // Initialize Spotify SDK
   useEffect(() => {
+    window.onSpotifyWebPlaybackSDKReady = () => setIsReady(true);
     // Load the Spotify SDK script
     if (!document.getElementById('spotify-sdk')) {
       const script = document.createElement('script');
@@ -37,26 +40,50 @@ export function useSpotify() {
 
   // Connect player when we have a token and SDK is ready
   const connect = useCallback(async (accessToken) => {
-    if (!isReady || !accessToken) return;
-
+    if (!accessToken) return;
+    setError(null);
+    setIsConnecting(true);
     setToken(accessToken);
+  }, []);
+
+  useEffect(() => {
+    if (!token) return;
+    if (!isReady) {
+      const timer = setTimeout(() => {
+        setIsConnecting(false);
+        setError('Spotify player could not load. Allow sdk.scdn.co in your browser or network settings, then reconnect.');
+        setToken(null);
+      }, 15000);
+      return () => clearTimeout(timer);
+    }
+    let disposed = false;
+    let ready = false;
+    const fail = message => {
+      if (disposed) return;
+      setError(message);
+      setIsConnecting(false);
+      setIsConnected(false);
+      setToken(null);
+    };
 
     const spotifyPlayer = new window.Spotify.Player({
       name: 'Sonin',
-      getOAuthToken: (cb) => cb(accessToken),
+      getOAuthToken: (cb) => cb(token),
       volume: 1.0
     });
+    playerRef.current = spotifyPlayer;
+    setPlayer(spotifyPlayer);
+    const timer = setTimeout(() => fail('Spotify player connection timed out. Check browser protected-content permissions and the app owner\'s Spotify Development Mode user access, then reconnect.'), 20000);
 
     // Error handling
     spotifyPlayer.addListener('initialization_error', ({ message }) => {
-      setError(`Init error: ${message}`);
+      fail(`Spotify player could not initialize: ${message}. Enable protected-content playback in your browser.`);
     });
     spotifyPlayer.addListener('authentication_error', ({ message }) => {
-      setError(`Auth error: ${message}. Token may have expired.`);
-      setIsConnected(false);
+      fail(`Spotify authorization failed: ${message}. Reconnect; if the app is in Development Mode, its owner must allow your Spotify account in the dashboard.`);
     });
     spotifyPlayer.addListener('account_error', ({ message }) => {
-      setError(`Account error: ${message}. Spotify Premium required.`);
+      fail(`Spotify account cannot play here: ${message}. Use your own active Premium account and ask the app owner to check Development Mode user access.`);
     });
     spotifyPlayer.addListener('playback_error', ({ message }) => {
       console.error('Spotify playback error:', message);
@@ -64,13 +91,19 @@ export function useSpotify() {
 
     // Ready
     spotifyPlayer.addListener('ready', ({ device_id }) => {
+      if (disposed) return;
+      ready = true;
+      clearTimeout(timer);
       setDeviceId(device_id);
       setIsConnected(true);
+      setIsConnecting(false);
       setError(null);
     });
 
     spotifyPlayer.addListener('not_ready', ({ device_id }) => {
       setIsConnected(false);
+      setIsConnecting(false);
+      setError('Spotify device is unavailable. Check your connection and reconnect Spotify.');
     });
 
     // Track changes
@@ -79,19 +112,27 @@ export function useSpotify() {
       setCurrentTrack(state.track_window.current_track);
     });
 
-    await spotifyPlayer.connect();
-    setPlayer(spotifyPlayer);
-  }, [isReady]);
+    Promise.resolve(spotifyPlayer.connect()).then(connected => {
+      if (!connected && !ready) fail('Spotify refused the player connection. Check account access and browser protected-content settings, then reconnect.');
+    }).catch(() => fail('Spotify player could not connect. Check your connection and try again.'));
+    return () => {
+      disposed = true;
+      clearTimeout(timer);
+      spotifyPlayer.disconnect();
+      if (playerRef.current === spotifyPlayer) playerRef.current = null;
+      setPlayer(null);
+      setDeviceId(null);
+      setIsConnected(false);
+    };
+  }, [isReady, token]);
 
   // Disconnect
   const disconnect = useCallback(() => {
-    if (player) {
-      player.disconnect();
-      setPlayer(null);
-      setIsConnected(false);
-      setDeviceId(null);
-    }
-  }, [player]);
+    setToken(null);
+    setIsConnecting(false);
+    setIsConnected(false);
+    setError(null);
+  }, []);
 
   // Activate the Spotify SDK audio element (must be called from a user gesture,
   // otherwise the browser blocks audio and this device stays silent).
@@ -209,6 +250,7 @@ export function useSpotify() {
 
   return {
     isReady,
+    isConnecting,
     isConnected,
     deviceId,
     currentTrack,

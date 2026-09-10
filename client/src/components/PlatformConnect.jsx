@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { Music2, X } from 'lucide-react';
 import Upload from './Upload';
 import PlatformLogo from './PlatformLogo';
@@ -23,6 +23,12 @@ function PlatformConnect({ spotify, youtube, audius, saavn, soundcloud, roomId, 
   const searchIdRef = useRef(0);
   const [searchError, setSearchError] = useState('');
   const [searched, setSearched] = useState(false);
+  const [spotifyAuthError, setSpotifyAuthError] = useState('');
+  const [spotifyAuthorizing, setSpotifyAuthorizing] = useState(false);
+  const authCleanupRef = useRef(null);
+  const spotifyConnectRef = useRef(spotify.connect);
+  spotifyConnectRef.current = spotify.connect;
+  useEffect(() => () => authCleanupRef.current?.(), []);
 
   const performSearch = useCallback(async (query) => {
     if (!query || !query.trim()) return;
@@ -109,11 +115,31 @@ function PlatformConnect({ spotify, youtube, audius, saavn, soundcloud, roomId, 
 
   // Spotify login using Authorization Code + PKCE (required by Spotify for new apps)
   const handleSpotifyLogin = async () => {
+    authCleanupRef.current?.();
+    setSpotifyAuthError('');
     const clientId = window.__SPOTIFY_CLIENT_ID;
     if (!clientId) {
-      alert('Spotify Client ID not configured. Ask the room host to set it up.');
+      setSpotifyAuthError('Spotify is not configured. Ask the app owner to set SPOTIFY_CLIENT_ID.');
       return;
     }
+    const popup = window.open('about:blank', 'spotify-auth', 'width=500,height=700');
+    if (!popup) {
+      setSpotifyAuthError('Allow popups for Sonin, then connect Spotify again.');
+      return;
+    }
+    setSpotifyAuthorizing(true);
+    let storageKey;
+    let timer;
+    let cancelled = false;
+    let handleToken;
+    const cleanup = () => {
+      cancelled = true;
+      clearInterval(timer);
+      if (handleToken) window.removeEventListener('message', handleToken);
+      if (storageKey) sessionStorage.removeItem(storageKey);
+      if (!popup.closed) popup.close();
+    };
+    authCleanupRef.current = cleanup;
 
     // Generate PKCE code verifier (random 64-char string)
     const generateVerifier = () => {
@@ -130,26 +156,42 @@ function PlatformConnect({ spotify, youtube, audius, saavn, soundcloud, roomId, 
         .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
     };
 
-    const codeVerifier = generateVerifier();
-    const codeChallenge = await generateChallenge(codeVerifier);
-
-    // Store verifier for the callback to use
-    sessionStorage.setItem('spotify_code_verifier', codeVerifier);
-
-    const redirectUri = `${window.location.origin}/callback/spotify`;
-    const scopes = 'streaming user-read-email user-read-private user-modify-playback-state';
-    const authUrl = `https://accounts.spotify.com/authorize?client_id=${clientId}&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scopes)}&code_challenge_method=S256&code_challenge=${codeChallenge}`;
-    
-    const popup = window.open(authUrl, 'spotify-auth', 'width=500,height=700');
-    const handleToken = (event) => {
-      if (event.origin !== window.location.origin || event.source !== popup) return;
-      if (event.data?.type === 'spotify-token') {
-        spotify.connect(event.data.token);
-        popup?.close();
-        window.removeEventListener('message', handleToken);
-      }
-    };
-    window.addEventListener('message', handleToken);
+    try {
+      const codeVerifier = generateVerifier();
+      const codeChallenge = await generateChallenge(codeVerifier);
+      if (cancelled) return;
+      const state = generateVerifier();
+      storageKey = `spotify_auth_${state}`;
+      const redirectUri = `${window.location.origin}/callback/spotify`;
+      sessionStorage.setItem(storageKey, JSON.stringify({ codeVerifier, redirectUri, createdAt: Date.now() }));
+      const scopes = 'streaming user-read-email user-read-private user-read-playback-state user-modify-playback-state';
+      const query = new URLSearchParams({ client_id: clientId, response_type: 'code', redirect_uri: redirectUri, scope: scopes, code_challenge_method: 'S256', code_challenge: codeChallenge, state });
+      handleToken = (event) => {
+        if (event.origin !== window.location.origin || event.source !== popup || event.data?.state !== state) return;
+        if (event.data.type !== 'spotify-token' && event.data.type !== 'spotify-auth-error') return;
+        if (event.data.type === 'spotify-token' && typeof event.data.token === 'string') {
+          spotifyConnectRef.current(event.data.token);
+        } else {
+          setSpotifyAuthError(event.data.message || 'Spotify authorization failed. Please try again.');
+        }
+        setSpotifyAuthorizing(false);
+        cleanup();
+      };
+      window.addEventListener('message', handleToken);
+      const started = Date.now();
+      timer = setInterval(() => {
+        if (popup.closed || Date.now() - started > 10 * 60 * 1000) {
+          setSpotifyAuthorizing(false);
+          setSpotifyAuthError('Spotify login was closed or expired. Please connect again.');
+          cleanup();
+        }
+      }, 1000);
+      popup.location.href = `https://accounts.spotify.com/authorize?${query}`;
+    } catch {
+      cleanup();
+      setSpotifyAuthorizing(false);
+      setSpotifyAuthError('Could not start Spotify login. Use HTTPS, allow popups and browser storage, then try again.');
+    }
   };
 
   if (!showPanel) {
@@ -336,11 +378,11 @@ function PlatformConnect({ spotify, youtube, audius, saavn, soundcloud, roomId, 
             </div>
           ) : (
             <div>
-              <button className="btn btn-primary" onClick={handleSpotifyLogin} style={{ background: '#1DB954' }}>
-                Connect Spotify (Premium required)
+              <button className="btn btn-primary" onClick={handleSpotifyLogin} disabled={spotifyAuthorizing || spotify.isConnecting} style={{ background: '#1DB954' }}>
+                {spotifyAuthorizing ? 'Authorizing Spotify...' : spotify.isConnecting ? 'Connecting Spotify player...' : 'Connect Spotify (Premium required)'}
               </button>
-              {spotify.error && (
-                <p style={{ color: 'var(--danger)', fontSize: 12, marginTop: 8 }}>{spotify.error}</p>
+              {(spotifyAuthError || spotify.error) && (
+                <p role="alert" style={{ color: 'var(--danger)', fontSize: 12, marginTop: 8 }}>{spotifyAuthError || spotify.error}</p>
               )}
               <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>
                 Each listener needs Spotify Premium. Use YouTube if you don't have it.
