@@ -4,11 +4,10 @@
     "name": "Ed Sheeran",
     "genre": "Pop / acoustic",
     "color": "#ffb08d",
-    "image": "/artists/ed-sheeran-live.jpg",
-    "source": "https://commons.wikimedia.org/wiki/File:Ed_Sheeran_in_Philadelphia_08.jpg",
-    "author": "<a href=\"//commons.wikimedia.org/wiki/User:Patrick_Cristiano\" title=\"User:Patrick Cristiano\">Patrick Cristiano</a>",
-    "license": "CC BY-SA 4.0",
-    "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0"
+    "image": "/artists/ed-sheeran-custom.jpg",
+    "profileImage": "/artists/ed-sheeran-custom.jpg",
+    "customImages": true,
+    "author": "User-supplied photo; photographer and license not provided"
   },
   {
     "id": "the-weeknd",
@@ -26,19 +25,18 @@
     "name": "Michael Jackson",
     "genre": "Pop / soul",
     "color": "#f2da78",
-    "image": "/artists/michael-jackson-live.jpg",
-    "source": "https://commons.wikimedia.org/wiki/File:MJ%26Friends-Munich_1999-Michael_Jackson_and_Slash_on_stage.jpg",
-    "author": "MJJ-777",
-    "license": "CC BY-SA 4.0",
-    "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0"
+    "image": "/artists/michael-jackson-custom.jpg",
+    "profileImage": "/artists/michael-jackson-custom.jpg",
+    "customImages": true,
+    "author": "User-supplied photo; photographer and license not provided"
   },
   {
     "id": "anirudh-ravichander",
     "name": "Anirudh Ravichander",
     "genre": "Tamil / film scores",
     "color": "#81e8ed",
-    "image": "/artists/BackAni.jpg",
-    "profileImage": "/artists/ani2.webp",
+    "image": "/artists/anirudh-ravichander-custom.jpg",
+    "profileImage": "/artists/anirudh-ravichander-custom.jpg",
     "customImages": true,
     "author": "User-supplied photos; photographer and license not provided"
   },
@@ -47,11 +45,10 @@
     "name": "Taylor Swift",
     "genre": "Pop / songwriting",
     "color": "#ffb5c4",
-    "image": "/artists/taylor-swift-performance.jpg",
-    "source": "https://commons.wikimedia.org/wiki/File:Taylor_Swift_Performance_(31366261870).jpg",
-    "author": "<a rel=\"nofollow\" class=\"external free\" href=\"https://www.flickr.com/photos/el_ave/\">https://www.flickr.com/photos/el_ave/</a>",
-    "license": "CC BY 2.0",
-    "licenseUrl": "https://creativecommons.org/licenses/by/2.0"
+    "image": "/artists/taylor-swift-custom.jpg",
+    "profileImage": "/artists/taylor-swift-custom.jpg",
+    "customImages": true,
+    "author": "User-supplied photo; photographer and license not provided"
   },
   {
     "id": "bruno-mars",
@@ -91,11 +88,10 @@
     "name": "A. R. Rahman",
     "genre": "Film scores / world",
     "color": "#f0ba87",
-    "image": "/artists/a-r-rahman-live.jpg",
-    "source": "https://commons.wikimedia.org/wiki/File:A._R._Rahman_at_Sufi_Concert_in_Dubai.jpg",
-    "author": "<a href=\"//commons.wikimedia.org/w/index.php?title=User:Jahabar_sadique&amp;action=edit&amp;redlink=1\" class=\"new\" title=\"User:Jahabar sadique (page does not exist)\">Jahabar sadique</a>",
-    "license": "CC BY-SA 4.0",
-    "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0"
+    "image": "/artists/a-r-rahman-custom.jpg",
+    "profileImage": "/artists/a-r-rahman-custom.jpg",
+    "customImages": true,
+    "author": "User-supplied photo; photographer and license not provided"
   },
   {
     "id": "dua-lipa",
