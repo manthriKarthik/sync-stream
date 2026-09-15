@@ -87,6 +87,19 @@ queue access checks, unique queue entries, upload validation, and HTTP ranges.
 
 ### Limits
 
+- YouTube uses a visible embedded video player, not a background-audio service.
+     On phones, including Samsung/Android browsers, locking the screen or
+     switching apps can suspend it. Keep the page visible for YouTube; use an
+     uploaded audio file or an available direct-audio source for lock-screen
+     listening. Website code cannot guarantee playback through OS suspension.
+     If autoplay is blocked, use **Play YouTube audio** or the embedded player's
+     Play control. Unavailable/private videos and videos that disallow embedding
+     show an error; retry a temporary failure or choose another track.
+- Direct-audio lock-screen Play/Pause controls act on the device immediately.
+     Listeners without room control pause/resume only their own audio; hosts and
+     DJs still control room playback. **Resume audio** appears when a browser
+     requires a fresh gesture after an interruption. Browser-emulated lock and
+     media-session tests do not replace tests on a physical phone.
 - Foreground refreshes no longer restart an unchanged song. Small shared-audio
      drift is corrected gradually; delayed background clock samples are discarded.
      If the OS suspends audio entirely, catching up to the other listeners still

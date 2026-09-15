@@ -1,5 +1,35 @@
 # Reliability Verification
 
+## Phone Playback Follow-up (2026-09-15)
+
+- Reported device: Samsung Galaxy S24, website in a phone browser, apparently
+  YouTube playback. A physical phone lock test was not available.
+- Reproduced a missing YouTube mount when the IFrame API was already loaded.
+  The player now belongs to the room, has a visible viewport and native
+  controls, and is destroyed on leaving. Re-entry creates a fresh player.
+- Queued playback is cancelled by pause/leave. Delayed readiness uses the same
+  checked playback path as normal starts. Autoplay blocking exposes a local
+  gesture control; player errors remain visible until an explicit retry.
+  Buffering no longer triggers repeated seek/play commands.
+- Direct-audio lock-screen Play/Pause acts locally before the socket response.
+  Listeners without room permission can pause/resume their own audio without
+  changing the host's playback. Seek buttons read the live audio position,
+  not a foreground-only React update. Interrupted autoplay exposes Resume audio.
+- Final production client build passed. All 36 room/source browser scenarios
+  passed across Chromium desktop/mobile, as did all 19 backend/unit/integration
+  tests. Editor diagnostics and desktop/mobile recovery layout checks passed.
+  The two-listener assertion now accounts for time between position samples
+  without widening its 1.5-second drift limit.
+- YouTube tests use a controlled IFrame API mock. Hidden-page and lock-screen
+  tests simulate visibility and Media Session actions; they do not simulate OS
+  suspension or certify audible live-provider playback. Live YouTube and actual
+  S24 lock/unlock playback remain manual checks.
+- Embedded YouTube is foreground playback, not a background-audio service.
+  Phone browsers/provider rules can stop it when locked. Use uploaded or
+  available direct-audio tracks for lock-screen listening; browser/OS limits
+  still apply. No silent-audio keepalive or video-audio extraction was added.
+- This update is local only. The hosted site has not been deployed or verified.
+
 ## Scope
 
 Verified on 2026-09-10 using local Chromium desktop and mobile emulation,

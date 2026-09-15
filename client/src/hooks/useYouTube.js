@@ -9,250 +9,252 @@ import { searchProvider } from './searchProvider';
 export function useYouTube(onEnded) {
   const onEndedRef = useRef(onEnded);
   onEndedRef.current = onEnded;
+  const [apiReady, setApiReady] = useState(false);
+  const [apiAttempt, setApiAttempt] = useState(0);
   const [isReady, setIsReady] = useState(false);
-  const [isConnected, setIsConnected] = useState(true); // Always connected (no login needed)
+  const [isConnected] = useState(true);
   const [isUnlocked, setIsUnlocked] = useState(false);
   const [needsGesture, setNeedsGesture] = useState(false);
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
+  const [isBuffering, setIsBuffering] = useState(false);
   const [player, setPlayer] = useState(null);
-  const [currentTrack, setCurrentTrack] = useState(null);
+  const [currentTrack] = useState(null);
   const [error, setError] = useState(null);
   const playerRef = useRef(null);
   const containerRef = useRef(null);
-  const unlockedRef = useRef(false);
-  const pendingPlayRef = useRef(null); // { videoId, positionSeconds } queued until unlock
-  const loadedVideoIdRef = useRef(null); // currently-loaded video, to avoid needless reloads
-  // Personal (local-only) mute. When the user mutes on THIS device, we must
-  // keep the player muted even though playTrack() calls unMute() on every
-  // play/resume/auto-advance — otherwise a track change would silently
-  // un-mute them. All unMute() calls below are guarded by this flag.
+  const pendingPlayRef = useRef(null);
+  const loadedVideoIdRef = useRef(null);
+  const wantsPlaybackRef = useRef(false);
+  const playbackCheckRef = useRef(null);
   const mutedRef = useRef(false);
+  const volumeRef = useRef(1);
 
-  // Load YouTube IFrame API
+  const clearPlaybackCheck = useCallback(() => {
+    clearTimeout(playbackCheckRef.current);
+    playbackCheckRef.current = null;
+  }, []);
+
   useEffect(() => {
     if (window.YT && window.YT.Player) {
-      setIsReady(true);
+      setApiReady(true);
       return;
     }
 
-    // Create a hidden container for the YouTube player
-    if (!document.getElementById('yt-player-container')) {
-      const div = document.createElement('div');
-      div.id = 'yt-player-container';
-      // Keep it on-screen but tiny & nearly invisible. Some mobile browsers
-      // refuse to play audio from a player positioned fully off-screen.
-      div.style.cssText = 'position:fixed;bottom:0;right:0;width:1px;height:1px;opacity:0.01;pointer-events:none;z-index:-1;overflow:hidden;';
-      const playerDiv = document.createElement('div');
-      playerDiv.id = 'yt-player';
-      div.appendChild(playerDiv);
-      document.body.appendChild(div);
-    }
+    const previousReady = window.onYouTubeIframeAPIReady;
+    const script = document.getElementById('youtube-iframe-api') || document.createElement('script');
+    const handleError = () => {
+      clearTimeout(loadTimer);
+      script.remove();
+      setError('YouTube could not load. Check your connection and retry.');
+    };
+    const loadTimer = setTimeout(handleError, 15000);
+    const handleReady = () => {
+      clearTimeout(loadTimer);
+      previousReady?.();
+      setError(null);
+      setApiReady(true);
+    };
 
-    if (!document.getElementById('youtube-iframe-api')) {
-      const script = document.createElement('script');
+    window.onYouTubeIframeAPIReady = handleReady;
+    script.addEventListener('error', handleError);
+    if (!script.isConnected) {
       script.id = 'youtube-iframe-api';
       script.src = 'https://www.youtube.com/iframe_api';
+      script.async = true;
       document.body.appendChild(script);
     }
-
-    window.onYouTubeIframeAPIReady = () => {
-      setIsReady(true);
+    return () => {
+      clearTimeout(loadTimer);
+      script.removeEventListener('error', handleError);
+      if (window.onYouTubeIframeAPIReady === handleReady) {
+        window.onYouTubeIframeAPIReady = previousReady;
+      }
     };
-  }, []);
+  }, [apiAttempt]);
 
-  // Initialize player when API is ready
   useEffect(() => {
-    if (!isReady || playerRef.current) return;
+    if (!apiReady || !containerRef.current) return;
+    let disposed = false;
+    const mount = document.createElement('div');
+    containerRef.current.appendChild(mount);
 
-    const ytPlayer = new window.YT.Player('yt-player', {
-      height: '1',
-      width: '1',
+    const ytPlayer = new window.YT.Player(mount, {
+      height: '100%',
+      width: '100%',
       playerVars: {
         autoplay: 0,
-        controls: 0,
-        disablekb: 1,
-        fs: 0,
+        controls: 1,
         iv_load_policy: 3,
-        modestbranding: 1,
         rel: 0,
-        playsinline: 1 // Required for iOS - prevents fullscreen takeover & allows programmatic play
+        playsinline: 1,
+        origin: window.location.origin
       },
       events: {
-        onReady: () => {
-          playerRef.current = ytPlayer;
-          setPlayer(ytPlayer);
-          // Ensure the iframe permits programmatic autoplay (needed so listeners
-          // can hear tracks the host starts without clicking each time).
+        onReady: (event) => {
+          if (disposed) return;
+          playerRef.current = event.target;
+          setPlayer(event.target);
+          setIsReady(true);
+          setError(null);
           try {
-            const iframe = ytPlayer.getIframe && ytPlayer.getIframe();
-            if (iframe) iframe.setAttribute('allow', 'autoplay; encrypted-media');
+            event.target.setVolume(volumeRef.current * 100);
+            if (mutedRef.current) event.target.mute();
+            const iframe = event.target.getIframe();
+            iframe.setAttribute('allow', 'autoplay; encrypted-media; fullscreen; picture-in-picture');
+            iframe.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
+            iframe.title = 'YouTube video player';
+            Object.assign(iframe.style, { position: 'absolute', inset: '0', width: '100%', height: '100%', border: '0' });
           } catch (_) { /* ignore */ }
         },
         onStateChange: (event) => {
-          // YT.PlayerState: ENDED=0, PLAYING=1, PAUSED=2, BUFFERING=3, CUED=5
+          if (disposed) return;
+          setIsVideoPlaying(event.data === 1);
+          setIsBuffering(event.data === 3);
           if (event.data === 1) {
-            // Actually playing -> no manual tap needed
+            clearPlaybackCheck();
             setNeedsGesture(false);
-            setIsVideoPlaying(true);
-          } else if (event.data === 3) {
-            // Buffering -> playback is coming, no tap needed
-            setNeedsGesture(false);
-          } else if (event.data === 2) {
-            // Paused
-            setIsVideoPlaying(false);
-          } else if (event.data === 0) {
-            // Track finished — notify the Room so the host advances the queue.
-            setIsVideoPlaying(false);
+            setError(null);
+          } else if (event.data === 0 && wantsPlaybackRef.current) {
+            wantsPlaybackRef.current = false;
+            clearPlaybackCheck();
             onEndedRef.current?.();
           }
         },
+        onAutoplayBlocked: () => {
+          if (disposed || !wantsPlaybackRef.current) return;
+          clearPlaybackCheck();
+          setNeedsGesture(true);
+          setIsVideoPlaying(false);
+          setIsBuffering(false);
+        },
         onError: (event) => {
+          if (disposed) return;
           const errors = {
-            2: 'Invalid video ID',
-            5: 'HTML5 player error',
-            100: 'Video not found or private',
-            101: 'Embedding not allowed',
-            150: 'Embedding not allowed'
+            2: 'Invalid YouTube video ID.',
+            5: 'YouTube could not play this video. Retry playback.',
+            100: 'This YouTube video is unavailable or private.',
+            101: 'This video does not allow playback outside YouTube. Choose another track.',
+            150: 'This video does not allow playback outside YouTube. Choose another track.',
+            153: 'YouTube could not verify this site. Check browser referrer/privacy settings.'
           };
+          clearPlaybackCheck();
+          loadedVideoIdRef.current = null;
+          pendingPlayRef.current = null;
+          setNeedsGesture(false);
+          setIsVideoPlaying(false);
+          setIsBuffering(false);
           setError(errors[event.data] || 'YouTube playback error');
         }
       }
     });
-  }, [isReady]);
 
-  // Play a video by YouTube video ID
+    return () => {
+      disposed = true;
+      clearPlaybackCheck();
+      pendingPlayRef.current = null;
+      loadedVideoIdRef.current = null;
+      wantsPlaybackRef.current = false;
+      playerRef.current = null;
+      ytPlayer.destroy();
+      mount.remove();
+    };
+  }, [apiReady, clearPlaybackCheck]);
+
   const playTrack = useCallback((videoId, positionSeconds = 0, fromGesture = false) => {
+    clearPlaybackCheck();
     setError(null);
-    // If the player instance isn't ready yet, remember what to play and apply
-    // it as soon as the player initializes (see the effect below).
+    setNeedsGesture(false);
+    wantsPlaybackRef.current = true;
+    if (fromGesture) setIsUnlocked(true);
     if (!playerRef.current) {
       pendingPlayRef.current = { videoId, positionSeconds };
+      if (fromGesture && !window.YT?.Player && !document.getElementById('youtube-iframe-api')) {
+        setApiAttempt(attempt => attempt + 1);
+      }
       return;
     }
+    pendingPlayRef.current = null;
     try {
-      const p = playerRef.current;
-      // An explicit user tap authorizes autoplay: mark unlocked and force a
-      // fresh loadVideoById so mobile browsers definitely start playback.
-      if (fromGesture) {
-        unlockedRef.current = true;
-        setIsUnlocked(true);
-      }
+      const currentPlayer = playerRef.current;
+      if (mutedRef.current) currentPlayer.mute();
+      else currentPlayer.unMute();
       const sameVideo = loadedVideoIdRef.current === videoId;
       if (sameVideo) {
-        // Same track already loaded — realign & resume WITHOUT reloading, for
-        // BOTH silent play/pause/seek AND an explicit user tap. This is the key
-        // fix for iOS (Chrome & Safari): a gesture tap must call playVideo() on
-        // the already-loaded video. Reloading with loadVideoById here restarts
-        // the video, and iOS then re-blocks the freshly-cued clip as autoplay
-        // (the play() runs before the async load finishes, losing the gesture),
-        // so the song would never actually start.
-        try { if (!mutedRef.current) p.unMute(); } catch (_) { /* ignore */ }
-        const cur = typeof p.getCurrentTime === 'function' ? (p.getCurrentTime() || 0) : 0;
-        if (typeof positionSeconds === 'number' && Math.abs(cur - positionSeconds) > 1.5) {
-          p.seekTo(positionSeconds, true);
+        const position = currentPlayer.getCurrentTime() || 0;
+        if (Number.isFinite(positionSeconds) && Math.abs(position - positionSeconds) > 1.5) {
+          currentPlayer.seekTo(positionSeconds, true);
         }
-        p.playVideo();
       } else {
-        // New track: (re)load and play. Loading inside the tap gesture
-        // guarantees the browser allows playback with sound.
-        try { if (!mutedRef.current) p.unMute(); } catch (_) { /* ignore */ }
+        setIsVideoPlaying(false);
+        setIsBuffering(true);
         loadedVideoIdRef.current = videoId;
-        p.loadVideoById({ videoId, startSeconds: positionSeconds || 0 });
-        p.playVideo();
+        currentPlayer.loadVideoById({ videoId, startSeconds: positionSeconds || 0 });
       }
-      // Verify playback actually started. On listener devices the browser may
-      // block autoplay (no recent user gesture) — if so, ask for a tap.
-      setTimeout(() => {
-        const pl = playerRef.current;
-        if (!pl || typeof pl.getPlayerState !== 'function') return;
-        const st = pl.getPlayerState();
-        // 1 = playing, 3 = buffering
-        if (st !== 1 && st !== 3) {
+      currentPlayer.playVideo();
+      const checkPlayback = (allowBuffering) => {
+        if (!wantsPlaybackRef.current || playerRef.current !== currentPlayer || loadedVideoIdRef.current !== videoId) return;
+        const state = currentPlayer.getPlayerState();
+        if (state === 1) return;
+        if (state === 3 && allowBuffering) {
+          playbackCheckRef.current = setTimeout(() => checkPlayback(false), 15000);
+          return;
+        }
+        setIsVideoPlaying(false);
+        setIsBuffering(false);
+        if (state === 3) {
+          loadedVideoIdRef.current = null;
+          setError('YouTube is taking too long to load. Retry playback.');
+        } else {
           setNeedsGesture(true);
         }
-      }, 1200);
-    } catch (err) {
-      pendingPlayRef.current = { videoId, positionSeconds };
+      };
+      playbackCheckRef.current = setTimeout(() => checkPlayback(true), 1200);
+    } catch (_) {
+      loadedVideoIdRef.current = null;
+      setIsBuffering(false);
+      setError('YouTube could not start this video. Retry playback.');
     }
-  }, []);
+  }, [clearPlaybackCheck]);
 
-  // Apply any queued track once the player instance becomes ready.
   useEffect(() => {
     if (!player || !playerRef.current) return;
     const pending = pendingPlayRef.current;
     if (!pending) return;
     pendingPlayRef.current = null;
-    try {
-      loadedVideoIdRef.current = pending.videoId;
-      playerRef.current.loadVideoById({
-        videoId: pending.videoId,
-        startSeconds: pending.positionSeconds || 0
-      });
-      playerRef.current.playVideo();
-    } catch (_) { /* ignore */ }
-  }, [player]);
+    playTrack(pending.videoId, pending.positionSeconds);
+  }, [player, playTrack]);
 
-  // Unlock playback on a user gesture (required by mobile autoplay policies).
-  // Must be called synchronously from within a click/touch handler.
   const unlock = useCallback(() => {
-    unlockedRef.current = true;
     setIsUnlocked(true);
-    const p = playerRef.current;
-    if (!p) return;
-
     const pending = pendingPlayRef.current;
     if (pending) {
-      // Apply the queued track inside this user gesture so mobile allows it.
-      pendingPlayRef.current = null;
-      loadedVideoIdRef.current = pending.videoId;
-      p.loadVideoById({
-        videoId: pending.videoId,
-        startSeconds: pending.positionSeconds || 0
-      });
-      p.playVideo();
-    } else {
-      // No track yet: prime the player with a muted play/pause to satisfy the
-      // gesture requirement so later programmatic plays are allowed.
-      try {
-        p.mute();
-        p.playVideo();
-        setTimeout(() => {
-          try {
-            // Only undo the muted priming if playback hasn't actually started
-            // in the meantime (e.g. a real track was force-played by a tap).
-            const st = typeof p.getPlayerState === 'function' ? p.getPlayerState() : -1;
-            if (st !== 1 && st !== 3) {
-              p.pauseVideo();
-            }
-            p.unMute();
-          } catch (_) { /* ignore */ }
-        }, 50);
-      } catch (_) { /* ignore */ }
+      playTrack(pending.videoId, pending.positionSeconds, true);
+    } else if (wantsPlaybackRef.current && loadedVideoIdRef.current && playerRef.current) {
+      playTrack(loadedVideoIdRef.current, playerRef.current.getCurrentTime() || 0, true);
     }
-  }, []);
+  }, [playTrack]);
 
-  // Pause
   const pause = useCallback(() => {
-    if (playerRef.current) playerRef.current.pauseVideo();
-  }, []);
-
-  // Stop completely (used when leaving a room): halt playback and clear the
-  // loaded video so no audio keeps playing after the user leaves.
-  const stop = useCallback(() => {
-    const p = playerRef.current;
-    if (!p) return;
-    try { p.pauseVideo(); } catch (_) { /* ignore */ }
-    try { p.stopVideo(); } catch (_) { /* ignore */ }
-    loadedVideoIdRef.current = null;
+    wantsPlaybackRef.current = false;
     pendingPlayRef.current = null;
-    setIsVideoPlaying(false);
+    clearPlaybackCheck();
     setNeedsGesture(false);
-  }, []);
+    setIsBuffering(false);
+    setIsVideoPlaying(false);
+    playerRef.current?.pauseVideo();
+  }, [clearPlaybackCheck]);
 
-  // Resume
+  const stop = useCallback(() => {
+    pause();
+    try { playerRef.current?.stopVideo(); } catch (_) { /* ignore */ }
+    loadedVideoIdRef.current = null;
+  }, [pause]);
+
   const resume = useCallback(() => {
-    if (playerRef.current) playerRef.current.playVideo();
-  }, []);
+    if (loadedVideoIdRef.current && playerRef.current) {
+      playTrack(loadedVideoIdRef.current, playerRef.current.getCurrentTime() || 0);
+    }
+  }, [playTrack]);
 
   // Seek (seconds)
   const seek = useCallback((positionSeconds) => {
@@ -261,6 +263,7 @@ export function useYouTube(onEnded) {
 
   // Set volume (0-1)
   const setVolume = useCallback((vol) => {
+    volumeRef.current = vol;
     if (playerRef.current) playerRef.current.setVolume(vol * 100);
   }, []);
 
@@ -320,6 +323,8 @@ export function useYouTube(onEnded) {
     isUnlocked,
     needsGesture,
     isVideoPlaying,
+    isBuffering,
+    containerRef,
     currentTrack,
     error,
     playTrack,

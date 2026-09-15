@@ -32,6 +32,21 @@ async function noOverflow(page) {
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 }
 
+async function captureMediaSession(page) {
+  await page.addInitScript(() => {
+    window.__mediaActions = {};
+    Object.defineProperty(navigator, 'mediaSession', {
+      configurable: true,
+      value: {
+        metadata: null,
+        playbackState: 'none',
+        setActionHandler(action, handler) { window.__mediaActions[action] = handler; },
+        setPositionState() {}
+      }
+    });
+  });
+}
+
 test('entry form handles invalid codes, keyboard submit, and responsive layout', async ({ page }, testInfo) => {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
@@ -135,6 +150,69 @@ test('returning from an app interruption resumes small drift without skipping au
   await page.getByRole('button', { name: 'Leave', exact: true }).click();
 });
 
+test('shared audio survives a hidden page and lock-screen controls act immediately', async ({ page }) => {
+  await captureMediaSession(page);
+  await createRoom(page);
+  await page.getByRole('button', { name: 'Enable audio', exact: true }).click();
+  await page.getByRole('button', { name: 'Upload', exact: true }).click();
+  await page.getByLabel('Audio file').setInputFiles({ name: 'Lock screen.wav', mimeType: 'audio/wav', buffer: audioFixture() });
+  await expect(page.locator('.queue-item')).toHaveCount(1);
+  await page.getByRole('button', { name: 'Play', exact: true }).click();
+  await expect.poll(() => page.locator('audio').evaluate(audio => audio.currentTime)).toBeGreaterThan(1);
+  const before = await page.evaluate(() => {
+    Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
+    document.dispatchEvent(new Event('visibilitychange'));
+    return document.querySelector('audio').currentTime;
+  });
+  await expect.poll(() => page.locator('audio').evaluate(audio => audio.currentTime)).toBeGreaterThan(before + 1);
+  await page.evaluate(() => window.__mediaActions.pause());
+  await expect(page.locator('audio')).toHaveJSProperty('paused', true);
+  const pausedAfterPlay = await page.evaluate(() => {
+    window.__mediaActions.play();
+    return document.querySelector('audio').paused;
+  });
+  expect(pausedAfterPlay).toBe(false);
+  const skippedPosition = await page.evaluate(() => {
+    document.querySelector('audio').currentTime = 14;
+    window.__mediaActions.seekbackward({ seekOffset: 10 });
+    return document.querySelector('audio').currentTime;
+  });
+  expect(skippedPosition).toBeCloseTo(4, 0);
+  await page.evaluate(() => {
+    delete document.hidden;
+    delete document.visibilityState;
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await page.getByRole('button', { name: 'Leave', exact: true }).click();
+  expect(await page.evaluate(() => navigator.mediaSession.metadata)).toBeNull();
+});
+
+test('shared audio exposes a gesture fallback after an interrupted background session', async ({ page }) => {
+  await createRoom(page);
+  await page.getByRole('button', { name: 'Enable audio', exact: true }).click();
+  await page.getByRole('button', { name: 'Upload', exact: true }).click();
+  await page.getByLabel('Audio file').setInputFiles({ name: 'Resume audio.wav', mimeType: 'audio/wav', buffer: audioFixture() });
+  await expect(page.locator('.queue-item')).toHaveCount(1);
+  await page.getByRole('button', { name: 'Play', exact: true }).click();
+  await expect.poll(() => page.locator('audio').evaluate(audio => audio.currentTime)).toBeGreaterThan(1);
+  await page.locator('audio').evaluate(audio => {
+    const originalPlay = audio.play.bind(audio);
+    window.__blockAudioPlayback = true;
+    audio.play = () => window.__blockAudioPlayback
+      ? Promise.reject(new DOMException('User gesture required', 'NotAllowedError'))
+      : originalPlay();
+    audio.pause();
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  const resume = page.getByRole('button', { name: 'Resume audio', exact: true });
+  await expect(resume).toBeVisible();
+  await page.evaluate(() => { window.__blockAudioPlayback = false; });
+  await resume.click();
+  await expect(page.locator('audio')).toHaveJSProperty('paused', false);
+  await expect(resume).toHaveCount(0);
+});
+
 test('two listeners exchange chat, receive control, and transfer host on leave', async ({ page, browser }, testInfo) => {
   const code = await createRoom(page);
   await page.getByRole('button', { name: 'Enable audio', exact: true }).click();
@@ -145,6 +223,7 @@ test('two listeners exchange chat, receive control, and transfer host on leave',
   await expect.poll(() => page.locator('audio').evaluate(audio => audio.currentTime)).toBeGreaterThan(1);
   const guestContext = await browser.newContext({ viewport: testInfo.project.use.viewport });
   const guest = await guestContext.newPage();
+  await captureMediaSession(guest);
   await guest.goto(testInfo.project.use.baseURL);
   await guest.getByRole('button', { name: 'Join a room', exact: true }).click();
   await guest.getByLabel('Your name').fill('Jamie');
@@ -153,9 +232,20 @@ test('two listeners exchange chat, receive control, and transfer host on leave',
   await expect(guest.getByRole('heading', { name: 'After Hours' })).toBeVisible();
   await guest.getByRole('button', { name: 'Enable audio', exact: true }).click();
   await expect.poll(() => guest.locator('audio').evaluate(audio => !audio.paused && audio.currentTime > 0)).toBe(true);
-  const hostPosition = await page.locator('audio').evaluate(audio => audio.currentTime);
-  const guestPosition = await guest.locator('audio').evaluate(audio => audio.currentTime);
-  expect(Math.abs(hostPosition - guestPosition)).toBeLessThan(1.5);
+  const hostSample = await page.locator('audio').evaluate(audio => ({ position: audio.currentTime, at: Date.now() }));
+  const guestSample = await guest.locator('audio').evaluate(audio => ({ position: audio.currentTime, at: Date.now() }));
+  const hostPosition = hostSample.position + (guestSample.at - hostSample.at) / 1000;
+  expect(Math.abs(hostPosition - guestSample.position)).toBeLessThan(1.5);
+  await expect(guest.getByRole('button', { name: 'Pause', exact: true })).toBeDisabled();
+  await guest.evaluate(() => window.__mediaActions.pause());
+  await expect(guest.locator('audio')).toHaveJSProperty('paused', true);
+  await expect.poll(() => page.locator('audio').evaluate(audio => audio.currentTime)).toBeGreaterThan(hostPosition + 2);
+  await expect(guest.locator('audio')).toHaveJSProperty('paused', true);
+  const guestPausedAfterPlay = await guest.evaluate(() => {
+    window.__mediaActions.play();
+    return document.querySelector('audio').paused;
+  });
+  expect(guestPausedAfterPlay).toBe(false);
   await expect(guest.getByRole('button', { name: 'Pause', exact: true })).toBeDisabled();
   await page.getByRole('button', { name: 'Open listeners and chat' }).click();
   await guest.getByRole('button', { name: 'Open listeners and chat' }).click();

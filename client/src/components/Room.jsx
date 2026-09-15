@@ -31,6 +31,7 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
   const [personalMuted, setPersonalMuted] = useState(false);
   const copyTimerRef = useRef(null);
   const songToastTimerRef = useRef(null);
+  const localPlaybackPausedRef = useRef(false);
 
   // Identity is by persistent userId (survives reconnects); fall back to the
   // socket id for older state that doesn't carry hostUserId.
@@ -50,6 +51,7 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
   const {
     audioRef,
     isPlaying,
+    needsGesture: audioNeedsGesture,
     currentTime,
     duration,
     loadTrack,
@@ -100,17 +102,10 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
   const audioEnabledRef = useRef(false);
   audioEnabledRef.current = audioEnabled;
 
-  // Treat a playback-control tap as the audio-unlock gesture: enable the
-  // auto-resume/auto-start retry loops on this device AND prime the YouTube
-  // iframe player. Without this, a host who only ever taps Saavn/Audius tracks
-  // leaves their YouTube player locked, so a later (auto-advanced) YouTube song
-  // silently fails to play for them while other listeners hear it fine.
   const unlockPlaybackEngines = (currentPlatform) => {
+    localPlaybackPausedRef.current = false;
+    setSharedActive(currentPlatform !== 'youtube');
     if (!audioEnabledRef.current) {
-      // First playback gesture on this device. Prime the YouTube player (unless
-      // we're about to start a YouTube track, which unlocks itself via
-      // playTrack(fromGesture=true)) so a later auto-advanced YouTube song can
-      // play without a manual tap.
       if (currentPlatform !== 'youtube') {
         try { youtube.unlock(); } catch (_) { /* ignore */ }
       }
@@ -313,7 +308,7 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
     if (!track) return;
     const isShared = track.platform !== 'youtube';
     // Silence/allow the shared <audio> engine based on the active track type.
-    setSharedActive(isShared);
+    setSharedActive(isShared && !localPlaybackPausedRef.current);
     if (isShared) {
       try { youtube.pause(); } catch (_) { /* ignore */ }
     }
@@ -336,7 +331,7 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
       const track = queue[state.trackIndex];
       if (!track) return; // queue not ready yet — applied by the effect below
       pendingPlatformRef.current = null;
-      if (unchanged) return;
+      if (unchanged || localPlaybackPausedRef.current) return;
 
       if (track.platform === 'youtube') {
         if (state.playing) {
@@ -367,7 +362,7 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
   // re-seek the player, causing playback to stop right after it starts.
   useEffect(() => {
     const state = pendingPlatformRef.current;
-    if (!state || !state.playing) return;
+    if (!state || !state.playing || localPlaybackPausedRef.current) return;
     const track = queue[state.trackIndex];
     if (!track) return;
     pendingPlatformRef.current = null; // apply once; ongoing alignment is handled by the drift effect
@@ -466,12 +461,13 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [queue, currentTrackIndex]);
 
-  // Auto-start YouTube on this device without a manual tap. Once the listener
-  // has enabled audio (the one-time overlay), we keep retrying automatically so
-  // a track that got blocked, joined mid-song, or came back from the background
-  // just resumes on its own — no "tap to play" pill needed.
   const ytStatusRef = useRef({ needsGesture: false, isVideoPlaying: false });
-  ytStatusRef.current = { needsGesture: youtube.needsGesture, isVideoPlaying: youtube.isVideoPlaying };
+  ytStatusRef.current = {
+    needsGesture: youtube.needsGesture,
+    isVideoPlaying: youtube.isVideoPlaying,
+    isBuffering: youtube.isBuffering,
+    error: youtube.error
+  };
   useEffect(() => {
     if (!audioEnabled) return;
     const track = queue[currentTrackIndex];
@@ -482,9 +478,9 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
       if (!state || !state.playing) return;
       if (justStartedInGesture(track.uri)) return; // let a fresh gesture-load settle
       if (justChangedTrack()) return; // let an auto-advanced track buffer from its start
-      const { needsGesture, isVideoPlaying } = ytStatusRef.current;
-      if (document.hidden) return;
-      if (isVideoPlaying) return; // already playing — nothing to do
+      const { needsGesture, isVideoPlaying, isBuffering, error } = ytStatusRef.current;
+      if (document.hidden || localPlaybackPausedRef.current) return;
+      if (isVideoPlaying || isBuffering || needsGesture || error) return;
       // Don't force-restart a track that has essentially finished. When a song
       // ends, isVideoPlaying is also false, and without this guard the retry
       // would replay the ended track every 2s (a "plays 2s then restarts" loop)
@@ -500,17 +496,14 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [queue, currentTrackIndex, audioEnabled]);
 
-  // Auto-resume shared-audio tracks (Saavn / Audius / uploads) the same way —
-  // no "tap to play" pill. Once audio is enabled the <audio> element is unlocked,
-  // so a blocked/joined-mid-song track can be resumed programmatically. We retry
-  // every 2s while it should be playing but the element is still paused.
   useEffect(() => {
-    if (!audioEnabled) return;
+    if (!audioEnabled || audioNeedsGesture) return;
     const track = queue[currentTrackIndex];
     const isShared = track && !!track.url && track.platform !== 'youtube';
     if (!isShared) return;
 
     const id = setInterval(() => {
+      if (document.hidden || localPlaybackPausedRef.current) return;
       const state = platformStateRef.current;
       if (!state || !state.playing) return;
       const a = audioRef.current;
@@ -521,7 +514,7 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
 
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [queue, currentTrackIndex, audioEnabled]);
+  }, [queue, currentTrackIndex, audioEnabled, audioNeedsGesture]);
 
   // joins mid-song (2nd, 3rd, ... listener) starts playing in sync instead of
   // sitting silent until the next host action.
@@ -559,7 +552,14 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
     // so resume from the real platform position instead of snapping to 0/stale.
     const position = isPlatformTrack
       ? (platformProgress.time || platformStateRef.current?.position || 0)
-      : currentTime;
+      : (audioRef.current?.currentTime ?? currentTime);
+    if (isPlatformTrack) {
+      recentGestureLoadRef.current = { videoId: activeTrack.uri, at: Date.now() };
+      youtube.playTrack(activeTrack.uri, position, true);
+    } else if (activeTrack?.url) {
+      if (!audioRef.current.src) loadTrack(activeTrack.url);
+      play();
+    }
     socket.emit('playback:play', {
       roomId: roomState.id,
       trackIndex: currentTrackIndex,
@@ -569,6 +569,8 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
 
   const handlePause = () => {
     if (!canControl) return;
+    if (isPlatformTrack) youtube.pause();
+    else pause();
     socket.emit('playback:pause', { roomId: roomState.id });
   };
 
@@ -716,6 +718,8 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
 
   // Enable audio on mobile - must run from a user gesture to satisfy autoplay policies
   const handleEnableAudio = () => {
+    localPlaybackPausedRef.current = false;
+    setSharedActive(queue[currentTrackIndex]?.platform !== 'youtube');
     // NOTE: do NOT prime the shared <audio> with play().then(pause) here — that
     // pause fires asynchronously and would silence the track we start below,
     // which was why a joining listener heard nothing until the host toggled
@@ -744,7 +748,7 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
           if (Number.isFinite(pos) && Math.abs((a.currentTime || 0) - pos) > 0.75) {
             try { a.currentTime = pos; } catch (_) { /* ignore */ }
           }
-          a.play().catch(() => {});
+          play();
         }
       } catch (_) { /* ignore */ }
     }
@@ -753,18 +757,16 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
     }
   };
 
-  // Fallback: if the browser hard-blocks autoplay even after audio is enabled,
-  // a single tap starts YouTube from within a user gesture (guaranteed allowed).
   const handleYouTubeTap = () => {
     const track = queue[currentTrackIndex];
     if (!track || track.platform !== 'youtube') return;
+    unlockPlaybackEngines('youtube');
+    recentGestureLoadRef.current = { videoId: track.uri, at: Date.now() };
     youtube.playTrack(track.uri, computePlatformPosition(platformStateRef.current), true);
     if (socket && roomState?.id) {
       socket.emit('playback:request-sync', { roomId: roomState.id });
     }
   };
-  // Kept for potential manual use; auto-resume normally makes taps unnecessary.
-  void handleYouTubeTap;
 
   // Stop ALL audio on this device before leaving, so nothing keeps playing
   // after the user leaves the room (shared <audio> and YouTube).
@@ -783,11 +785,35 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
   // helps keep the shared audio (Audius / uploads) playing while the app is
   // backgrounded or the phone is locked.
   const mediaControlsRef = useRef({});
-  mediaControlsRef.current = { handlePlay, handlePause, handleNext, handlePrev, handleSeek };
+  mediaControlsRef.current = {
+    handlePlay: () => {
+      if (canControl) handlePlay();
+      else if (platformStateRef.current?.playing) handleEnableAudio();
+    },
+    handlePause: () => {
+      if (canControl) handlePause();
+      else {
+        localPlaybackPausedRef.current = true;
+        setAudioEnabled(false);
+        setSharedActive(false);
+        pause();
+      }
+    },
+    handleNext,
+    handlePrev,
+    handleSeek,
+    getPosition: () => audioRef.current?.currentTime || 0,
+    getDuration: () => audioRef.current?.duration || 0
+  };
 
   useEffect(() => {
     if (!('mediaSession' in navigator)) return;
     const track = queue[currentTrackIndex];
+    if (!track || isPlatformTrack) {
+      navigator.mediaSession.metadata = null;
+      navigator.mediaSession.playbackState = 'none';
+      return;
+    }
     if (track && 'MediaMetadata' in window) {
       try {
         navigator.mediaSession.metadata = new window.MediaMetadata({
@@ -809,51 +835,48 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
     };
     set('play', () => mediaControlsRef.current.handlePlay?.());
     set('pause', () => mediaControlsRef.current.handlePause?.());
-    set('nexttrack', () => mediaControlsRef.current.handleNext?.());
-    set('previoustrack', () => mediaControlsRef.current.handlePrev?.());
+    set('nexttrack', canControl ? () => mediaControlsRef.current.handleNext?.() : null);
+    set('previoustrack', canControl ? () => mediaControlsRef.current.handlePrev?.() : null);
     // Lock-screen scrubber drag + skip-forward/back buttons.
-    set('seekto', (details) => {
+    set('seekto', canControl ? (details) => {
       if (details && typeof details.seekTime === 'number') {
         mediaControlsRef.current.handleSeek?.(details.seekTime);
       }
-    });
-    set('seekbackward', (details) => {
+    } : null);
+    set('seekbackward', canControl ? (details) => {
       const step = (details && details.seekOffset) || 10;
-      const now = navigator.mediaSession.__pos || 0;
+      const now = mediaControlsRef.current.getPosition();
       mediaControlsRef.current.handleSeek?.(Math.max(0, now - step));
-    });
-    set('seekforward', (details) => {
+    } : null);
+    set('seekforward', canControl ? (details) => {
       const step = (details && details.seekOffset) || 10;
-      const now = navigator.mediaSession.__pos || 0;
-      const dur = navigator.mediaSession.__dur || 0;
+      const now = mediaControlsRef.current.getPosition();
+      const dur = mediaControlsRef.current.getDuration();
       mediaControlsRef.current.handleSeek?.(dur ? Math.min(dur, now + step) : now + step);
-    });
+    } : null);
     return () => {
       ['play', 'pause', 'nexttrack', 'previoustrack', 'seekto', 'seekbackward', 'seekforward'].forEach((a) => set(a, null));
+      navigator.mediaSession.metadata = null;
+      navigator.mediaSession.playbackState = 'none';
     };
-  }, [queue, currentTrackIndex]);
+  }, [queue, currentTrackIndex, isPlatformTrack, canControl]);
 
-  // Reflect play/pause state to the OS lock screen, including YouTube tracks.
   useEffect(() => {
-    if (!('mediaSession' in navigator)) return;
-    const nowPlaying = !activeTrack ? false : (isPlatformTrack ? platformPlaying : isPlaying);
-    navigator.mediaSession.playbackState = !activeTrack ? 'none' : (nowPlaying ? 'playing' : 'paused');
-  }, [isPlaying, platformPlaying, isPlatformTrack, activeTrack]);
+    if (!('mediaSession' in navigator) || isPlatformTrack) return;
+    navigator.mediaSession.playbackState = !activeTrack ? 'none' : (isPlaying ? 'playing' : 'paused');
+  }, [isPlaying, isPlatformTrack, activeTrack, queue, canControl]);
 
   // Keep the lock-screen scrubber position in sync
   useEffect(() => {
-    if (!('mediaSession' in navigator) || typeof navigator.mediaSession.setPositionState !== 'function') return;
-    const dur = isPlatformTrack ? platformProgress.duration : duration;
-    const pos = isPlatformTrack ? platformProgress.time : currentTime;
-    // Stash latest position/duration so seekforward/backward handlers can read them.
-    navigator.mediaSession.__pos = pos;
-    navigator.mediaSession.__dur = dur;
+    if (!('mediaSession' in navigator) || isPlatformTrack || typeof navigator.mediaSession.setPositionState !== 'function') return;
+    const dur = duration;
+    const pos = currentTime;
     if (dur > 0 && pos >= 0 && pos <= dur) {
       try {
         navigator.mediaSession.setPositionState({ duration: dur, playbackRate: 1, position: pos });
       } catch (_) { /* ignore */ }
     }
-  }, [currentTime, duration, platformProgress, isPlatformTrack]);
+  }, [currentTime, duration, isPlatformTrack]);
 
   // When the app returns from background / lock, re-request the current
   // position so playback catches back up in sync.
@@ -952,6 +975,28 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
         </div>
         {copyError && <p className="form-error" role="status">{copyError}</p>}
         {!audioEnabled && <div className="audio-enable-bar"><Headphones size={20} /><span>Audio on this device is off</span><button className="btn btn-primary" onClick={handleEnableAudio}>Enable audio</button></div>}
+        {audioEnabled && activeTrack && !isPlatformTrack && platformPlaying && audioNeedsGesture && (
+          <div className="audio-enable-bar" role="status">
+            <Headphones size={20} />
+            <span>Audio playback is blocked on this device.</span>
+            <button className="btn btn-primary" onClick={handleEnableAudio}>Resume audio</button>
+          </div>
+        )}
+        {isPlatformTrack && platformPlaying && (youtube.error || (audioEnabled && youtube.needsGesture)) && (
+          <div className="audio-enable-bar" role={youtube.error ? 'alert' : 'status'}>
+            <Headphones size={20} />
+            <span>{youtube.error || 'YouTube playback is blocked on this device.'}</span>
+            <button className="btn btn-primary" onClick={handleYouTubeTap}>
+              {youtube.error ? 'Retry YouTube' : 'Play YouTube audio'}
+            </button>
+          </div>
+        )}
+        <div
+          id="yt-player-container"
+          ref={youtube.containerRef}
+          hidden={!isPlatformTrack}
+          style={{ position: 'relative', width: '100%', maxWidth: 640, minHeight: 200, aspectRatio: '16 / 9', marginBottom: 24 }}
+        />
         <PlatformConnect
           connected={connected}
           youtube={youtube}

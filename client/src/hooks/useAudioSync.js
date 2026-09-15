@@ -60,7 +60,6 @@ export function useAudioSync(socket, onEnded) {
     audio.volume = 1;
     // Reduce buffering for lower latency
     audio.preload = 'auto';
-    // Required for iOS/Android to allow inline + background/lock-screen playback
     audio.setAttribute('playsinline', '');
     audio.setAttribute('webkit-playsinline', '');
     // Some mobile browsers only keep media alive in the background if the
@@ -72,19 +71,12 @@ export function useAudioSync(socket, onEnded) {
 
     const unlock = () => {
       if (unlockedRef.current) return;
-      unlockedRef.current = true;
-      const st = playbackStateRef.current;
-      // If a shared track is supposed to be playing, start it right now inside
-      // this gesture and LEAVE it playing. The old code always paused right
-      // after priming, which silenced the song the listener just joined — that
-      // was the reason a second "tap to play" was needed. Now the single join
-      // gesture is enough and playback continues on its own.
-      if (st && st.playing && audio.src && activeIsSharedRef.current) {
-        audio.play().then(() => setNeedsGesture(false)).catch(() => {});
-        return;
-      }
-      // Otherwise prime the element silently so later programmatic plays work.
-      audio.play().then(() => audio.pause()).catch(() => { /* ignore */ });
+      const state = playbackStateRef.current;
+      if (!state?.playing || !audio.src || !activeIsSharedRef.current) return;
+      audio.play().then(() => {
+        unlockedRef.current = true;
+        setNeedsGesture(false);
+      }).catch(error => setNeedsGesture(error.name === 'NotAllowedError'));
     };
 
     window.addEventListener('click', unlock);
@@ -260,11 +252,11 @@ export function useAudioSync(socket, onEnded) {
               // Blocked by the browser's autoplay policy (typically iOS). Flag
               // it so the Room can show a tap-to-play pill for this track.
               console.error('Playback blocked:', err);
-              setNeedsGesture(true);
+              setIsPlaying(false);
+              setNeedsGesture(err.name === 'NotAllowedError');
             });
           }
         }
-        setIsPlaying(true);
       } else {
         audio.pause();
         audio.playbackRate = 1.0;
@@ -308,17 +300,23 @@ export function useAudioSync(socket, onEnded) {
     };
 
     // Once the element is actually producing sound, clear any tap-to-play flag.
-    const handlePlaying = () => setNeedsGesture(false);
+    const handlePlaying = () => {
+      setNeedsGesture(false);
+      setIsPlaying(true);
+    };
+    const handlePaused = () => setIsPlaying(false);
 
     audio.addEventListener('loadedmetadata', handleLoadedMetadata);
     audio.addEventListener('ended', handleEnded);
     audio.addEventListener('playing', handlePlaying);
+    audio.addEventListener('pause', handlePaused);
     animFrameRef.current = requestAnimationFrame(updateTime);
 
     return () => {
       audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
       audio.removeEventListener('ended', handleEnded);
       audio.removeEventListener('playing', handlePlaying);
+      audio.removeEventListener('pause', handlePaused);
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
     };
   }, [socket]);
@@ -371,13 +369,20 @@ export function useAudioSync(socket, onEnded) {
   }, []);
 
   const play = useCallback(() => {
-    audioRef.current.play().catch(console.error);
-    setIsPlaying(true);
+    audioRef.current.play().then(() => {
+      setIsPlaying(true);
+      setNeedsGesture(false);
+    }).catch(error => {
+      setIsPlaying(false);
+      setNeedsGesture(error.name === 'NotAllowedError');
+      console.error(error);
+    });
   }, []);
 
   const pause = useCallback(() => {
     audioRef.current.pause();
     setIsPlaying(false);
+    setNeedsGesture(false);
   }, []);
 
   // Resume the shared element from a user gesture (tap-to-play fallback for
@@ -398,7 +403,10 @@ export function useAudioSync(socket, onEnded) {
     a.play().then(() => {
       setIsPlaying(true);
       setNeedsGesture(false);
-    }).catch(() => { /* still blocked — pill stays */ });
+    }).catch(error => {
+      setIsPlaying(false);
+      setNeedsGesture(error.name === 'NotAllowedError');
+    });
   }, []);
 
   // Fully stop and unload the shared element (used when the queue empties or the
@@ -416,6 +424,7 @@ export function useAudioSync(socket, onEnded) {
     }
     lastHardSeekRef.current = 0;
     setIsPlaying(false);
+    setNeedsGesture(false);
     setCurrentTime(0);
     setDuration(0);
     setCurrentTrackUrl(null);
@@ -438,6 +447,8 @@ export function useAudioSync(socket, onEnded) {
     if (!isShared) {
       const a = audioRef.current;
       if (a && !a.paused) a.pause();
+      setIsPlaying(false);
+      setNeedsGesture(false);
     }
   }, []);
 
