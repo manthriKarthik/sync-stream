@@ -2,6 +2,35 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { RoomManager } from './rooms.js';
 
+test('completion advances once at the song boundary without a host callback', () => {
+  const manager = new RoomManager();
+  const room = manager.createRoom('Background', 'host', 'Host');
+  room.queue = [{ id: 'first', duration: 30000 }, { id: 'next', duration: 30000 }];
+  room.playbackState = { playing: true, trackIndex: 0, position: 0, startedAt: 1000, updatedAt: 1000 };
+  const report = { trackId: 'first', updatedAt: 1000, duration: 5 };
+  assert.equal(manager.completeTrack(room.id, report, 6000), null);
+  assert.equal(manager.completeTrack(room.id, { ...report, trackId: 'wrong' }, 31000), null);
+  const next = manager.completeTrack(room.id, report, 31000);
+  assert.equal(next.trackIndex, 1);
+  assert.equal(next.position, 0);
+  assert.equal(next.playing, true);
+  assert.equal(manager.completeTrack(room.id, report, 31001), null);
+  room.playbackState.playing = false;
+  assert.equal(manager.completeTrack(room.id, { trackId: 'next', updatedAt: next.updatedAt }, 100000), null);
+});
+
+test('unknown-duration tracks use a listener duration and single-track repeats reject stale completion', () => {
+  const manager = new RoomManager();
+  const room = manager.createRoom('Upload', 'host', 'Host');
+  room.queue = [{ id: 'upload' }];
+  room.playbackState = { playing: true, trackIndex: 0, position: 20, startedAt: 1000, updatedAt: 1000 };
+  const report = { trackId: 'upload', updatedAt: 1000, duration: 30 };
+  assert.equal(manager.completeTrack(room.id, { ...report, duration: NaN }, 11000), null);
+  assert.equal(manager.completeTrack(room.id, report, 2000), null);
+  assert.equal(manager.completeTrack(room.id, report, 11000).trackIndex, 0);
+  assert.equal(manager.completeTrack(room.id, report, 11001), null);
+});
+
 test('repeated joins preserve granted controls and membership time', () => {
   const manager = new RoomManager();
   const room = manager.createRoom('Test room', 'host', 'Host', 'host-user');

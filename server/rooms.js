@@ -39,6 +39,27 @@ export class RoomManager {
     return this.rooms.get(roomId);
   }
 
+  completeTrack(roomId, { trackId, updatedAt, duration } = {}, now = Date.now()) {
+    const room = this.rooms.get(roomId);
+    const state = room?.playbackState;
+    const track = room?.queue[state?.trackIndex];
+    if (!state?.playing || !track || track.id !== trackId || state.updatedAt !== updatedAt) return null;
+    const durationSeconds = Number.isFinite(track.duration) && track.duration > 0
+      ? track.duration / 1000 : duration;
+    if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) return null;
+    const position = state.position + Math.max(0, (now - state.startedAt) / 1000);
+    if (position < durationSeconds - 0.25) return null;
+    const syncTime = Math.max(now + 100, state.updatedAt + 1);
+    room.playbackState = {
+      playing: true,
+      trackIndex: (state.trackIndex + 1) % room.queue.length,
+      position: 0,
+      startedAt: syncTime,
+      updatedAt: syncTime
+    };
+    return { ...room.playbackState, syncTime };
+  }
+
   getRoomState(roomId) {
     const room = this.rooms.get(roomId);
     if (!room) return null;

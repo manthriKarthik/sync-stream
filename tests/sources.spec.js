@@ -136,6 +136,18 @@ test('YouTube cancels queued playback when paused before the player is ready', a
   await expect.poll(() => page.evaluate(() => window.__youtubeMock.players[0].state)).toBe(1);
 });
 
+test('YouTube delayed readiness starts at the current room position', async ({ page }) => {
+  await mockYouTube(page, { deferReady: true });
+  await page.goto('/');
+  await createYouTubeRoom(page);
+  await page.clock.install();
+  await addYouTubeTrack(page);
+  await page.clock.runFor(5000);
+  await page.evaluate(() => window.__youtubeMock.players[0].ready());
+  await expect.poll(() => page.evaluate(() => window.__youtubeMock.players[0].loads.length)).toBe(1);
+  expect(await page.evaluate(() => window.__youtubeMock.players[0].loads[0].startSeconds)).toBeGreaterThanOrEqual(4.5);
+});
+
 test('YouTube buffering is not interrupted by automatic retries', async ({ page }) => {
   await mockYouTube(page, { buffering: true });
   await page.goto('/');
@@ -149,7 +161,7 @@ test('YouTube buffering is not interrupted by automatic retries', async ({ page 
   await expect(page.getByRole('button', { name: 'Play YouTube audio', exact: true })).toHaveCount(0);
 });
 
-test('YouTube starts visibly on add and a late listener can enable audio without host toggles', async ({ page, browser }, testInfo) => {
+test('YouTube starts visibly on add and a late listener can recover blocked audio without host toggles', async ({ page, browser }, testInfo) => {
   await mockYouTube(page);
   await page.goto('/');
   await createYouTubeRoom(page);
@@ -174,7 +186,7 @@ test('YouTube starts visibly on add and a late listener can enable audio without
       window.__youtubeMock.blocked = false;
       return window.__youtubeMock.players[0].hiddenStarts.length;
     });
-    await guest.getByRole('button', { name: 'Enable audio', exact: true }).click();
+    await guest.getByRole('button', { name: 'Play YouTube audio', exact: true }).click();
     await expect.poll(() => guest.evaluate(() => window.__youtubeMock.players[0].state)).toBe(1);
     expect(await guest.evaluate(() => window.__youtubeMock.players[0].hiddenStarts.length)).toBe(startsBeforeEnable + 1);
     await expect(guest.getByRole('button', { name: 'Pause', exact: true })).toBeDisabled();
@@ -194,6 +206,45 @@ test('YouTube starts visibly on add and a late listener can enable audio without
   }
 });
 
+test('YouTube lock-screen controls use the live player position while hidden', async ({ page }) => {
+  await mockYouTube(page);
+  await page.addInitScript(() => {
+    window.__mediaActions = {};
+    Object.defineProperty(navigator, 'mediaSession', {
+      configurable: true,
+      value: {
+        metadata: null,
+        playbackState: 'none',
+        setActionHandler(action, handler) { window.__mediaActions[action] = handler; },
+        setPositionState() {}
+      }
+    });
+  });
+  await page.goto('/');
+  await createYouTubeRoom(page);
+  await addYouTubeTrack(page);
+  await expect.poll(() => page.evaluate(() => typeof window.__mediaActions.pause)).toBe('function');
+  expect(await page.evaluate(() => navigator.mediaSession.metadata?.title)).toContain('dQw4w9WgXcQ');
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
+    document.dispatchEvent(new Event('visibilitychange'));
+    window.__youtubeMock.players[0].position = 42;
+    window.__mediaActions.seekbackward({ seekOffset: 10 });
+  });
+  expect(await page.evaluate(() => window.__youtubeMock.players[0].seeks.at(-1))).toBe(32);
+  await page.evaluate(() => window.__mediaActions.pause());
+  await expect.poll(() => page.evaluate(() => window.__youtubeMock.players[0].state)).toBe(2);
+  await page.evaluate(() => {
+    window.__youtubeMock.players[0].position = 32;
+    window.__mediaActions.play();
+  });
+  await expect.poll(() => page.evaluate(() => window.__youtubeMock.players[0].state)).toBe(1);
+  expect(await page.evaluate(() => window.__youtubeMock.players[0].position)).toBeCloseTo(32, 0);
+  await page.getByRole('button', { name: 'Leave', exact: true }).click();
+  expect(await page.evaluate(() => navigator.mediaSession.metadata)).toBeNull();
+});
+
 test('music sources exclude Spotify and never load its SDK', async ({ page, request }) => {
   const spotifyRequests = [];
   const errors = [];
@@ -208,7 +259,11 @@ test('music sources exclude Spotify and never load its SDK', async ({ page, requ
   await expect(page.getByRole('heading', { name: 'Source Check' })).toBeVisible();
   await expect(page.locator('.platform-tab')).toHaveText(['Audius', 'Saavn', 'SoundCloud', 'YouTube', 'Upload']);
   await expect(page.getByText(/spotify/i)).toHaveCount(0);
-  await page.getByRole('button', { name: 'Enable audio', exact: true }).click();
+  for (const source of ['Audius', 'Saavn', 'SoundCloud', 'YouTube', 'Upload']) {
+    await page.getByRole('button', { name: source, exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Enable audio', exact: true })).toHaveCount(0);
+    await expect(page.getByText('Audio on this device is off', { exact: true })).toHaveCount(0);
+  }
   await page.getByRole('button', { name: 'YouTube', exact: true }).click();
   await expect(page.getByPlaceholder('Paste YouTube URL...')).toBeVisible();
   await page.getByRole('button', { name: 'Upload', exact: true }).click();

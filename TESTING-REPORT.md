@@ -1,5 +1,57 @@
 # Reliability Verification
 
+## Known-Good Comparison And Queue Completion (2026-09-16)
+
+- Compared playback with `5494983938ca496a461d4a54f705ed9694203a20`
+  without resetting current work. Restored YouTube Media Session controls that
+  had been removed, using live player positions for hidden-page seek/resume.
+  YouTube seeks now reach the local SDK immediately before room broadcast.
+- Queue completion no longer depends on the host browser's ended callback.
+  The server checks known song durations every 500ms; active listeners may
+  report completion for tracks with unknown durations. Reports require room
+  membership, the current track ID and playback version, and a position near
+  the song boundary. Duplicate, stale, and premature reports are rejected.
+- Ended shared audio is not restarted by automatic recovery while waiting for
+  the next playback version. Provider-to-queue ID changes do not reload an
+  already-loaded direct URL, preserving in-gesture playback starts.
+- Server tests cover host-independent Saavn advancement, listener completion,
+  outsider rejection, early five-second reports, paused state, and duplicate
+  reports. Browser regressions cover YouTube lock-screen controls and short
+  Saavn media responses. These use mocked providers and simulated visibility.
+- Follow-up event traces showed normal short-stream completion with variable
+  startup delay under parallel browser load. The media-ended wait now allows
+  12 seconds; strict single-start and hidden-page next-source assertions remain.
+  Both desktop and mobile short-Saavn checks passed with final media state and
+  lifecycle traces attached to the test report.
+- YouTube requests waiting for SDK readiness now include elapsed waiting time
+  in the starting position. The five-second readiness regression failed before
+  this fix and passed afterward, alongside pause-cancellation and buffering
+  checks. This fixes stale startup position, not measured network latency.
+- Production build and all 23 backend tests passed. Physical-device latency,
+  Bluetooth timing, and live provider streaming remain unverified.
+- Combined room/source browser run: 44 passed, two mobile failures (invalid
+  room-code feedback and a timeout in the two-listener control scenario).
+  All new Saavn, completion, YouTube readiness, and lock-screen scenarios passed.
+  Full report: `test-results/playback-completion-final.json`.
+  Both failed mobile scenarios passed unchanged in an isolated single-worker
+  rerun (`test-results/completion-rerun.json`). The broad run was not all-green;
+  this records observed test instability rather than a clean first-pass result.
+- Deploy client and server together: the client now sends playback:ended for
+  automatic completion; manual Next retains its existing permission checks.
+  No hosted deployment or physical phone playback has been verified. Server
+  advancement cannot prevent a browser/OS from suspending audio or networking.
+
+## Audio Opt-in Removal (2026-09-16)
+
+- Removed the generic Enable audio banner and its state from every platform.
+  Playback and recovery no longer wait for a separate audio opt-in.
+- Personal listener pause remains local and respected. Resume audio and
+  Play YouTube audio appear only when the browser reports blocked playback;
+  removing the app's opt-in cannot override browser autoplay restrictions.
+- Updated room tests to join and play without an enable click, and added
+  absence checks for the banner across Audius, Saavn, SoundCloud, YouTube,
+  and Upload. Changes remain local until deployment.
+
 ## YouTube Startup Follow-up (2026-09-16)
 
 - Reproduced an ordering defect: adding the first YouTube song issued player

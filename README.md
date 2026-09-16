@@ -105,7 +105,13 @@ queue access checks, unique queue entries, upload validation, and HTTP ranges.
      If the OS suspends audio entirely, catching up to the other listeners still
      skips the missed interval. YouTube background playback may be restricted by
      the browser/provider. This cannot be guaranteed away by website code.
-- Deploy the server and client together for the passive-sync protocol changes.
+- Known-duration queues advance on the server even when the host browser is
+     inactive. For unknown durations, an active listener reports completion;
+     if every browser is suspended, advancement must wait for one to resume.
+     A prematurely ended stream is not automatically replayed while waiting
+     for the room's next track. Provider stream failures still need a retry
+     or another source; this does not recover missing audio data.
+- Deploy the server and client together for the sync and completion protocol changes.
      Local tests do not update or verify an existing hosted deployment.
 - Public-provider searches time out after 15 seconds and display errors for
      upstream failures. Run `node scripts/check-providers.mjs https://your-site`

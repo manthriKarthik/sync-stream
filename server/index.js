@@ -70,6 +70,16 @@ const upload = multer({
 const roomManager = new RoomManager();
 const clockSync = new ClockSyncHandler();
 
+setInterval(() => {
+  for (const room of roomManager.rooms.values()) {
+    const state = room.playbackState;
+    const track = room.queue[state.trackIndex];
+    if (!state.playing || !track) continue;
+    const next = roomManager.completeTrack(room.id, { trackId: track.id, updatedAt: state.updatedAt });
+    if (next) io.to(room.id).emit('playback:sync', next);
+  }
+}, 500).unref();
+
 // Whether a given socket may control playback in a room:
 // the host, anyone in collaborative mode, or a member the host granted control.
 // Identity is resolved via the member's persistent userId so it survives
@@ -787,6 +797,13 @@ io.on('connection', (socket) => {
       ...room.playbackState,
       syncTime
     });
+  });
+
+  socket.on('playback:ended', ({ roomId, trackId, updatedAt, duration }) => {
+    const room = roomManager.getRoom(roomId);
+    if (!room?.members[socket.id]) return;
+    const next = roomManager.completeTrack(roomId, { trackId, updatedAt, duration });
+    if (next) io.to(roomId).emit('playback:sync', next);
   });
 
   socket.on('playback:next', ({ roomId }) => {

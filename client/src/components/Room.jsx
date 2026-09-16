@@ -21,7 +21,6 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
   const [currentTrackIndex, setCurrentTrackIndex] = useState(
     roomState?.playbackState?.trackIndex || 0
   );
-  const [audioEnabled, setAudioEnabled] = useState(false);
   const [songAddedToast, setSongAddedToast] = useState(null); // { name, addedBy }
   const [codeCopied, setCodeCopied] = useState(false);
   const [copyError, setCopyError] = useState('');
@@ -40,14 +39,18 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
     ? roomState.hostUserId === userId
     : roomState?.hostId === socket?.id;
 
-  // When a track finishes, only the HOST advances the queue. If every listener
-  // emitted "next", 3+ people would skip multiple songs at once. The server
-  // wraps back to the first track when the queue ends.
-  const handleTrackEnded = useCallback(() => {
-    if (!isHost) return;
+  const handleTrackEnded = useCallback(({ duration: endedDuration } = {}) => {
     if (!socket?.connected || !roomState?.id) return;
-    socket.emit('playback:next', { roomId: roomState.id });
-  }, [isHost, socket, roomState?.id]);
+    const state = platformStateRef.current;
+    const track = queueRef.current[state?.trackIndex];
+    if (!state?.playing || !track || localPlaybackPausedRef.current) return;
+    socket.emit('playback:ended', {
+      roomId: roomState.id,
+      trackId: track.id,
+      updatedAt: state.updatedAt,
+      duration: endedDuration
+    });
+  }, [socket, roomState?.id]);
 
   const {
     audioRef,
@@ -99,21 +102,9 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
   // Key (track.id||url) of the source currently loaded into the shared <audio>
   // element, so we never reload/restart a track that's already loaded.
   const lastLoadedUrlRef = useRef(null);
-  // Mirror of `audioEnabled` for use inside gesture callbacks (avoids a stale
-  // closure right after setAudioEnabled).
-  const audioEnabledRef = useRef(false);
-  audioEnabledRef.current = audioEnabled;
-
   const unlockPlaybackEngines = (currentPlatform) => {
     localPlaybackPausedRef.current = false;
     setSharedActive(currentPlatform !== 'youtube');
-    if (!audioEnabledRef.current) {
-      if (currentPlatform !== 'youtube') {
-        try { youtube.unlock(); } catch (_) { /* ignore */ }
-      }
-      audioEnabledRef.current = true;
-      setAudioEnabled(true);
-    }
   };
   // Remembers the last user seek so polling holds the bar at the tapped spot
   // until the platform player actually reports it (YouTube seeks asynchronously).
@@ -252,8 +243,9 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
           // audio and snaps the progress bar back to 0.
           const key = nextTrack.id || nextTrack.url;
           if (lastLoadedUrlRef.current !== key) {
+            const sameSource = audioRef.current.src === new URL(nextTrack.url, window.location.href).href;
             lastLoadedUrlRef.current = key;
-            loadTrack(nextTrack.url);
+            if (!sameSource || audioRef.current.ended) loadTrack(nextTrack.url);
           }
         }
         syncPlayback(state);
@@ -304,8 +296,9 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
         // which stops the song that's currently playing.
         const key = track.id || track.url;
         if (lastLoadedUrlRef.current !== key) {
+          const sameSource = audioRef.current.src === new URL(track.url, window.location.href).href;
           lastLoadedUrlRef.current = key;
-          loadTrack(track.url);
+          if (!sameSource || audioRef.current.ended) loadTrack(track.url);
         }
       }
     }
@@ -479,7 +472,6 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
     error: youtube.error
   };
   useEffect(() => {
-    if (!audioEnabled) return;
     const track = queue[currentTrackIndex];
     if (!track || track.platform !== 'youtube') return;
 
@@ -504,10 +496,10 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
 
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [queue, currentTrackIndex, audioEnabled]);
+  }, [queue, currentTrackIndex]);
 
   useEffect(() => {
-    if (!audioEnabled || audioNeedsGesture) return;
+    if (audioNeedsGesture) return;
     const track = queue[currentTrackIndex];
     const isShared = track && !!track.url && track.platform !== 'youtube';
     if (!isShared) return;
@@ -518,13 +510,14 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
       if (!state || !state.playing) return;
       const a = audioRef.current;
       if (!a || !a.src) return;
+      if (a.ended) return;
       if (!a.paused) return; // already playing — nothing to do
       resume();
     }, 2000);
 
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [queue, currentTrackIndex, audioEnabled, audioNeedsGesture]);
+  }, [queue, currentTrackIndex, audioNeedsGesture]);
 
   // joins mid-song (2nd, 3rd, ... listener) starts playing in sync instead of
   // sitting silent until the next host action.
@@ -561,7 +554,7 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
     // For YouTube tracks the shared <audio> currentTime is meaningless,
     // so resume from the real platform position instead of snapping to 0/stale.
     const position = isPlatformTrack
-      ? (platformProgress.time || platformStateRef.current?.position || 0)
+      ? youtube.getPosition()
       : (audioRef.current?.currentTime ?? currentTime);
     if (isPlatformTrack) {
       recentGestureLoadRef.current = { videoId: activeTrack.uri, at: Date.now() };
@@ -636,6 +629,7 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
     // Optimistically reflect the new position locally so the seeker's progress
     // bar jumps instantly instead of waiting for the server round-trip.
     if (isPlatformTrack) {
+      youtube.seek(time);
       setPlatformProgress((p) => ({ ...p, time }));
     } else {
       seek(time);
@@ -726,15 +720,13 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentTrackIndex, personalMuted]);
 
-  // Enable audio on mobile - must run from a user gesture to satisfy autoplay policies
-  const handleEnableAudio = () => {
+  const handleResumeAudio = () => {
     localPlaybackPausedRef.current = false;
     setSharedActive(queue[currentTrackIndex]?.platform !== 'youtube');
     // NOTE: do NOT prime the shared <audio> with play().then(pause) here — that
     // pause fires asynchronously and would silence the track we start below,
     // which was why a joining listener heard nothing until the host toggled
     // play/pause. The window-level unlock handler already blesses the element.
-    setAudioEnabled(true);
 
     // Start the currently-active track INSIDE this user gesture so mobile
     // browsers allow it to play with sound. Then request a fresh sync so the
@@ -796,28 +788,28 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
   mediaControlsRef.current = {
     handlePlay: () => {
       if (canControl) handlePlay();
-      else if (platformStateRef.current?.playing) handleEnableAudio();
+      else if (platformStateRef.current?.playing) handleResumeAudio();
     },
     handlePause: () => {
       if (canControl) handlePause();
       else {
         localPlaybackPausedRef.current = true;
-        setAudioEnabled(false);
         setSharedActive(false);
+        youtube.pause();
         pause();
       }
     },
     handleNext,
     handlePrev,
     handleSeek,
-    getPosition: () => audioRef.current?.currentTime || 0,
-    getDuration: () => audioRef.current?.duration || 0
+    getPosition: () => isPlatformTrack ? youtube.getPosition() : (audioRef.current?.currentTime || 0),
+    getDuration: () => isPlatformTrack ? youtube.getDuration() : (audioRef.current?.duration || 0)
   };
 
   useEffect(() => {
     if (!('mediaSession' in navigator)) return;
     const track = queue[currentTrackIndex];
-    if (!track || isPlatformTrack) {
+    if (!track) {
       navigator.mediaSession.metadata = null;
       navigator.mediaSession.playbackState = 'none';
       return;
@@ -870,21 +862,22 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
   }, [queue, currentTrackIndex, isPlatformTrack, canControl]);
 
   useEffect(() => {
-    if (!('mediaSession' in navigator) || isPlatformTrack) return;
-    navigator.mediaSession.playbackState = !activeTrack ? 'none' : (isPlaying ? 'playing' : 'paused');
-  }, [isPlaying, isPlatformTrack, activeTrack, queue, canControl]);
+    if (!('mediaSession' in navigator)) return;
+    const playing = isPlatformTrack ? youtube.isVideoPlaying : isPlaying;
+    navigator.mediaSession.playbackState = !activeTrack ? 'none' : (playing ? 'playing' : 'paused');
+  }, [isPlaying, youtube.isVideoPlaying, isPlatformTrack, activeTrack, queue, canControl]);
 
   // Keep the lock-screen scrubber position in sync
   useEffect(() => {
-    if (!('mediaSession' in navigator) || isPlatformTrack || typeof navigator.mediaSession.setPositionState !== 'function') return;
-    const dur = duration;
-    const pos = currentTime;
+    if (!('mediaSession' in navigator) || typeof navigator.mediaSession.setPositionState !== 'function') return;
+    const dur = isPlatformTrack ? youtube.getDuration() : duration;
+    const pos = isPlatformTrack ? youtube.getPosition() : currentTime;
     if (dur > 0 && pos >= 0 && pos <= dur) {
       try {
         navigator.mediaSession.setPositionState({ duration: dur, playbackRate: 1, position: pos });
       } catch (_) { /* ignore */ }
     }
-  }, [currentTime, duration, isPlatformTrack]);
+  }, [currentTime, duration, platformProgress, isPlatformTrack]);
 
   // When the app returns from background / lock, re-request the current
   // position so playback catches back up in sync.
@@ -982,15 +975,14 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
           </div>}
         </div>
         {copyError && <p className="form-error" role="status">{copyError}</p>}
-        {!audioEnabled && <div className="audio-enable-bar"><Headphones size={20} /><span>Audio on this device is off</span><button className="btn btn-primary" onClick={handleEnableAudio}>Enable audio</button></div>}
-        {audioEnabled && activeTrack && !isPlatformTrack && platformPlaying && audioNeedsGesture && (
+        {activeTrack && !isPlatformTrack && platformPlaying && audioNeedsGesture && (
           <div className="audio-enable-bar" role="status">
             <Headphones size={20} />
             <span>Audio playback is blocked on this device.</span>
-            <button className="btn btn-primary" onClick={handleEnableAudio}>Resume audio</button>
+            <button className="btn btn-primary" onClick={handleResumeAudio}>Resume audio</button>
           </div>
         )}
-        {isPlatformTrack && platformPlaying && (youtube.error || (audioEnabled && youtube.needsGesture)) && (
+        {isPlatformTrack && platformPlaying && (youtube.error || youtube.needsGesture) && (
           <div className="audio-enable-bar" role={youtube.error ? 'alert' : 'status'}>
             <Headphones size={20} />
             <span>{youtube.error || 'YouTube playback is blocked on this device.'}</span>

@@ -34,6 +34,7 @@ export function useAudioSync(socket, onEnded) {
   // (e.g. Gaana). Torn down and recreated on each load.
   const hlsRef = useRef(null);
   const playbackStateRef = useRef(null);
+  const endedPlaybackRef = useRef(null);
   const offsetSamplesRef = useRef([]);
   // Timestamp of the last hard seek, to rate-limit hard seeks (avoids the iOS
   // "cut cut" stutter from seeking every drift check).
@@ -72,7 +73,7 @@ export function useAudioSync(socket, onEnded) {
     const unlock = () => {
       if (unlockedRef.current) return;
       const state = playbackStateRef.current;
-      if (!state?.playing || !audio.src || !activeIsSharedRef.current) return;
+      if (!state?.playing || !audio.src || audio.ended || !activeIsSharedRef.current) return;
       audio.play().then(() => {
         unlockedRef.current = true;
         setNeedsGesture(false);
@@ -226,6 +227,8 @@ export function useAudioSync(socket, onEnded) {
     const unchanged = isUnchangedSnapshot(playbackStateRef.current, state);
     const preservePlayback = unchanged && !audio.paused;
     playbackStateRef.current = state;
+    if (state.playing && endedPlaybackRef.current?.updatedAt === state.updatedAt
+      && endedPlaybackRef.current?.trackIndex === state.trackIndex) return;
     if (preservePlayback) return;
 
     if (state.playing) {
@@ -287,9 +290,8 @@ export function useAudioSync(socket, onEnded) {
 
     const handleEnded = () => {
       setIsPlaying(false);
-      // Let the Room decide how to advance (host-only, with the correct roomId).
-      // The server wraps back to the first track when the queue finishes.
-      onEndedRef.current?.();
+      endedPlaybackRef.current = playbackStateRef.current;
+      onEndedRef.current?.({ duration: audio.duration });
     };
 
     // Once the element is actually producing sound, clear any tap-to-play flag.
@@ -316,6 +318,7 @@ export function useAudioSync(socket, onEnded) {
 
   const loadTrack = useCallback((url) => {
     const audio = audioRef.current;
+    endedPlaybackRef.current = null;
     // Tear down any previous HLS instance before loading a new source.
     if (hlsRef.current) {
       try { hlsRef.current.destroy(); } catch (_) { /* ignore */ }
@@ -385,6 +388,8 @@ export function useAudioSync(socket, onEnded) {
     const a = audioRef.current;
     if (!a) return;
     const state = playbackStateRef.current;
+    if (state && endedPlaybackRef.current?.updatedAt === state.updatedAt
+      && endedPlaybackRef.current?.trackIndex === state.trackIndex) return;
     if (state && state.playing && a.src) {
       const syncedNow = Date.now() + clockOffsetRef.current;
       const elapsed = state.syncTime ? (syncedNow - state.syncTime) / 1000 : 0;

@@ -117,7 +117,7 @@ export function useYouTube(onEnded) {
           } else if (event.data === 0 && wantsPlaybackRef.current) {
             wantsPlaybackRef.current = false;
             clearPlaybackCheck();
-            onEndedRef.current?.();
+            onEndedRef.current?.({ duration: event.target.getDuration() });
           }
         },
         onAutoplayBlocked: () => {
@@ -168,7 +168,7 @@ export function useYouTube(onEnded) {
     wantsPlaybackRef.current = true;
     if (fromGesture) setIsUnlocked(true);
     if (!playerRef.current) {
-      pendingPlayRef.current = { videoId, positionSeconds };
+      pendingPlayRef.current = { videoId, positionSeconds, requestedAt: Date.now() };
       if (fromGesture && !window.YT?.Player && !document.getElementById('youtube-iframe-api')) {
         setApiAttempt(attempt => attempt + 1);
       }
@@ -222,14 +222,16 @@ export function useYouTube(onEnded) {
     const pending = pendingPlayRef.current;
     if (!pending) return;
     pendingPlayRef.current = null;
-    playTrack(pending.videoId, pending.positionSeconds);
+    const elapsed = Math.max(0, (Date.now() - pending.requestedAt) / 1000);
+    playTrack(pending.videoId, pending.positionSeconds + elapsed);
   }, [player, playTrack]);
 
   const unlock = useCallback(() => {
     setIsUnlocked(true);
     const pending = pendingPlayRef.current;
     if (pending) {
-      playTrack(pending.videoId, pending.positionSeconds, true);
+      const elapsed = Math.max(0, (Date.now() - pending.requestedAt) / 1000);
+      playTrack(pending.videoId, pending.positionSeconds + elapsed, true);
     } else if (wantsPlaybackRef.current && loadedVideoIdRef.current && playerRef.current) {
       playTrack(loadedVideoIdRef.current, playerRef.current.getCurrentTime() || 0, true);
     }

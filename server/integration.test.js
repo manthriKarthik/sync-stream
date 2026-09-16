@@ -197,6 +197,48 @@ test('rejoining a paused room receives the authoritative paused playback snapsho
   assert.equal(actual.snapshot, true);
 });
 
+test('a listener can complete a track without host activity and stale reports cannot skip again', async () => {
+  const host = await connect();
+  const guest = await connect();
+  const outsider = await connect();
+  const room = await roomFor(host);
+  await addTrack(host, room.id);
+  const queue = await addTrack(host, room.id);
+  const joined = eventFrom(guest, 'room:state');
+  guest.emit('room:join', { roomId: room.id, username: 'Listener' });
+  await joined;
+  await sync(guest, room.id);
+  const playing = eventFrom(host, 'playback:sync');
+  host.emit('playback:play', { roomId: room.id, trackIndex: 0, position: 29.9 });
+  const state = await playing;
+  const report = { roomId: room.id, trackId: queue[0].id, updatedAt: state.updatedAt, duration: 30 };
+  outsider.emit('playback:ended', report);
+  assert.equal((await sync(host, room.id)).trackIndex, 0);
+  const next = eventFrom(guest, 'playback:sync');
+  guest.emit('playback:ended', report);
+  assert.equal((await next).trackIndex, 1);
+  guest.emit('playback:ended', report);
+  assert.equal((await sync(guest, room.id)).trackIndex, 1);
+});
+
+test('Saavn queue advances by server duration without any browser ended callback', async () => {
+  const host = await connect();
+  const room = await roomFor(host);
+  const updated = eventFrom(host, 'queue:updated');
+  host.emit('queue:add-platform-track', {
+    roomId: room.id,
+    track: { name: 'Short Saavn', platform: 'saavn', url: '/api/saavn/stream?u=test', duration: 1000 }
+  });
+  await updated;
+  await addTrack(host, room.id);
+  const played = eventFrom(host, 'playback:sync');
+  host.emit('playback:play', { roomId: room.id, trackIndex: 0, position: 0 });
+  await played;
+  const advanced = await eventFrom(host, 'playback:sync');
+  assert.equal(advanced.trackIndex, 1);
+  assert.equal(advanced.position, 0);
+});
+
 test('Saavn proxy tracks are accepted into the queue', async () => {
   const host = await connect();
   const room = await roomFor(host);

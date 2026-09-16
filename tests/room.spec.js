@@ -1,8 +1,8 @@
 const { test, expect } = require('@playwright/test');
 
-function audioFixture() {
+function audioFixture(durationSeconds = 30) {
   const sampleRate = 8000;
-  const samples = sampleRate * 30;
+  const samples = sampleRate * durationSeconds;
   const buffer = Buffer.alloc(44 + samples * 2);
   buffer.write('RIFF', 0);
   buffer.writeUInt32LE(buffer.length - 8, 4);
@@ -70,7 +70,7 @@ test('upload, play, seek, pause, remove and leave work without leaking audio', a
   page.on('pageerror', error => errors.push(error.message));
   await createRoom(page);
   await expect(page.getByRole('button', { name: 'Next', exact: true })).toBeDisabled();
-  await page.getByRole('button', { name: 'Enable audio', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Enable audio', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Upload', exact: true }).click();
   await page.getByLabel('Audio file').setInputFiles({ name: 'wrong.txt', mimeType: 'text/plain', buffer: Buffer.from('test') });
   await expect(page.getByRole('alert')).toContainText('Choose an MP3');
@@ -95,7 +95,7 @@ test('upload, play, seek, pause, remove and leave work without leaking audio', a
 
 test('returning to Chrome does not hard-seek a playing song with small drift', async ({ page }) => {
   await createRoom(page);
-  await page.getByRole('button', { name: 'Enable audio', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Enable audio', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Upload', exact: true }).click();
   await page.getByLabel('Audio file').setInputFiles({ name: 'Foreground test.wav', mimeType: 'audio/wav', buffer: audioFixture() });
   await expect(page.locator('.queue-item')).toHaveCount(1);
@@ -124,7 +124,7 @@ test('returning to Chrome does not hard-seek a playing song with small drift', a
 
 test('returning from an app interruption resumes small drift without skipping audio', async ({ page }) => {
   await createRoom(page);
-  await page.getByRole('button', { name: 'Enable audio', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Enable audio', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Upload', exact: true }).click();
   await page.getByLabel('Audio file').setInputFiles({ name: 'Interrupted playback.wav', mimeType: 'audio/wav', buffer: audioFixture() });
   await expect(page.locator('.queue-item')).toHaveCount(1);
@@ -153,7 +153,7 @@ test('returning from an app interruption resumes small drift without skipping au
 test('shared audio survives a hidden page and lock-screen controls act immediately', async ({ page }) => {
   await captureMediaSession(page);
   await createRoom(page);
-  await page.getByRole('button', { name: 'Enable audio', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Enable audio', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Upload', exact: true }).click();
   await page.getByLabel('Audio file').setInputFiles({ name: 'Lock screen.wav', mimeType: 'audio/wav', buffer: audioFixture() });
   await expect(page.locator('.queue-item')).toHaveCount(1);
@@ -190,7 +190,7 @@ test('shared audio survives a hidden page and lock-screen controls act immediate
 
 test('queued audio starts after the current song ends while hidden', async ({ page }) => {
   await createRoom(page);
-  await page.getByRole('button', { name: 'Enable audio', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Enable audio', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Upload', exact: true }).click();
   for (const name of ['First background song.wav', 'Next background song.wav']) {
     await page.getByLabel('Audio file').setInputFiles({ name, mimeType: 'audio/wav', buffer: audioFixture() });
@@ -198,11 +198,11 @@ test('queued audio starts after the current song ends while hidden', async ({ pa
   }
   await page.getByRole('button', { name: 'Play', exact: true }).click();
   await expect.poll(() => page.locator('audio').evaluate(audio => !audio.paused && audio.currentTime > 0)).toBe(true);
+  await page.getByRole('slider', { name: 'Playback position' }).fill('28');
   const firstSource = await page.locator('audio').evaluate(audio => {
     Object.defineProperty(document, 'hidden', { configurable: true, value: true });
     Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
     document.dispatchEvent(new Event('visibilitychange'));
-    audio.currentTime = audio.duration - 0.3;
     return audio.src;
   });
   await expect.poll(() => page.locator('audio').evaluate(audio => audio.src)).not.toBe(firstSource);
@@ -210,9 +210,59 @@ test('queued audio starts after the current song ends while hidden', async ({ pa
   await page.getByRole('button', { name: 'Leave', exact: true }).click();
 });
 
+test('Saavn does not loop an early-ended stream and advances without host activity', async ({ page }, testInfo) => {
+  test.setTimeout(45000);
+  const tracks = [
+    { id: 'short-saavn', name: 'Short Saavn response', platform: 'saavn', url: '/api/saavn/stream?fixture=short', duration: 20000 },
+    { id: 'next-saavn', name: 'Next Saavn song', platform: 'saavn', url: '/api/saavn/stream?fixture=next', duration: 30000 }
+  ];
+  await page.route('**/api/saavn/search?*', route => route.fulfill({ json: { results: tracks } }));
+  await page.route('**/api/saavn/stream?*', route => route.fulfill({
+    contentType: 'audio/wav', body: audioFixture(route.request().url().includes('short') ? 3 : 30)
+  }));
+  await createRoom(page);
+  await page.locator('audio').evaluate(audio => {
+    window.__audioStarts = 0;
+    window.__audioEvents = [];
+    for (const event of ['loadstart', 'playing', 'pause', 'seeking', 'seeked', 'ended', 'error']) {
+      audio.addEventListener(event, () => window.__audioEvents.push({
+        event, time: audio.currentTime, paused: audio.paused, ended: audio.ended, at: Date.now()
+      }));
+    }
+    audio.addEventListener('play', () => { window.__audioStarts += 1; });
+    audio.addEventListener('ended', () => { window.__endedAt = Date.now(); });
+  });
+  await page.getByRole('button', { name: 'Saavn', exact: true }).click();
+  await page.getByPlaceholder('Search songs (Hindi, English, Telugu, Tamil...)').fill('fixture');
+  await page.getByPlaceholder('Search songs (Hindi, English, Telugu, Tamil...)').press('Enter');
+  await page.locator('.search-result-row').filter({ hasText: tracks[0].name }).click();
+  await page.locator('.search-result-row').filter({ hasText: tracks[1].name }).click();
+  await expect(page.locator('.queue-item')).toHaveCount(2);
+  try {
+    await expect.poll(() => page.evaluate(() => Number.isFinite(window.__endedAt)), { timeout: 12000 }).toBe(true);
+  } finally {
+    await testInfo.attach('media-events', {
+      body: JSON.stringify(await page.locator('audio').evaluate(audio => ({
+        events: window.__audioEvents, time: audio.currentTime, duration: audio.duration,
+        paused: audio.paused, ended: audio.ended, seeking: audio.seeking, readyState: audio.readyState
+      }))), contentType: 'application/json'
+    });
+  }
+  await expect.poll(() => page.evaluate(() => Date.now() - window.__endedAt)).toBeGreaterThan(3500);
+  expect(await page.evaluate(() => window.__audioStarts)).toBe(1);
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await expect.poll(() => page.locator('audio').evaluate(audio => audio.src), { timeout: 20000 }).toContain('fixture=next');
+  await expect.poll(() => page.locator('audio').evaluate(audio => !audio.paused && audio.currentTime > 0)).toBe(true);
+  await page.getByRole('button', { name: 'Leave', exact: true }).click();
+});
+
 test('shared audio exposes a gesture fallback after an interrupted background session', async ({ page }) => {
   await createRoom(page);
-  await page.getByRole('button', { name: 'Enable audio', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Enable audio', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Upload', exact: true }).click();
   await page.getByLabel('Audio file').setInputFiles({ name: 'Resume audio.wav', mimeType: 'audio/wav', buffer: audioFixture() });
   await expect(page.locator('.queue-item')).toHaveCount(1);
@@ -237,7 +287,7 @@ test('shared audio exposes a gesture fallback after an interrupted background se
 
 test('two listeners exchange chat, receive control, and transfer host on leave', async ({ page, browser }, testInfo) => {
   const code = await createRoom(page);
-  await page.getByRole('button', { name: 'Enable audio', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Enable audio', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Upload', exact: true }).click();
   await page.getByLabel('Audio file').setInputFiles({ name: 'Shared listen.wav', mimeType: 'audio/wav', buffer: audioFixture() });
   await expect(page.locator('.queue-item')).toHaveCount(1);
@@ -252,7 +302,7 @@ test('two listeners exchange chat, receive control, and transfer host on leave',
   await guest.getByLabel('Room code', { exact: true }).fill(code.toUpperCase());
   await guest.getByRole('button', { name: 'Join room', exact: true }).click();
   await expect(guest.getByRole('heading', { name: 'After Hours' })).toBeVisible();
-  await guest.getByRole('button', { name: 'Enable audio', exact: true }).click();
+  await expect(guest.getByRole('button', { name: 'Enable audio', exact: true })).toHaveCount(0);
   await expect.poll(() => guest.locator('audio').evaluate(audio => !audio.paused && audio.currentTime > 0)).toBe(true);
   const hostSample = await page.locator('audio').evaluate(audio => ({ position: audio.currentTime, at: Date.now() }));
   const guestSample = await guest.locator('audio').evaluate(audio => ({ position: audio.currentTime, at: Date.now() }));
@@ -291,7 +341,7 @@ test('two listeners exchange chat, receive control, and transfer host on leave',
 
 test('network loss preserves buffered audio, disables room commands, and allows offline leave', async ({ page, context }) => {
   await createRoom(page);
-  await page.getByRole('button', { name: 'Enable audio', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Enable audio', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Upload', exact: true }).click();
   await page.getByLabel('Audio file').setInputFiles({ name: 'Offline playback.wav', mimeType: 'audio/wav', buffer: audioFixture() });
   await expect(page.locator('.queue-item')).toHaveCount(1);
@@ -354,7 +404,7 @@ test('network loss preserves buffered audio, disables room commands, and allows 
 
 test('a reconnecting guest applies missed pause and track changes without duplicate members', async ({ page, browser }, testInfo) => {
   const code = await createRoom(page);
-  await page.getByRole('button', { name: 'Enable audio', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Enable audio', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Upload', exact: true }).click();
   for (const name of ['First track.wav', 'Second track.wav']) {
     await page.getByLabel('Audio file').setInputFiles({ name, mimeType: 'audio/wav', buffer: audioFixture() });
@@ -369,7 +419,7 @@ test('a reconnecting guest applies missed pause and track changes without duplic
     await guest.getByLabel('Your name').fill('Returning listener');
     await guest.getByLabel('Room code', { exact: true }).fill(code);
     await guest.getByRole('button', { name: 'Join room', exact: true }).click();
-    await guest.getByRole('button', { name: 'Enable audio', exact: true }).click();
+    await expect(guest.getByRole('button', { name: 'Enable audio', exact: true })).toHaveCount(0);
     await expect.poll(() => guest.locator('audio').evaluate(audio => !audio.paused && audio.currentTime > 0)).toBe(true);
     await guestContext.setOffline(true);
     await expect(guest.getByText('Reconnecting to your room...', { exact: true })).toBeVisible();
@@ -400,7 +450,7 @@ test('failed audio requests recover after the connection returns', async ({ page
   let failAudio = true;
   await page.route('**/uploads/**', route => failAudio ? route.abort('internetdisconnected') : route.continue());
   await createRoom(page);
-  await page.getByRole('button', { name: 'Enable audio', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Enable audio', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Upload', exact: true }).click();
   await page.getByLabel('Audio file').setInputFiles({ name: 'Recoverable stream.wav', mimeType: 'audio/wav', buffer: audioFixture() });
   await expect(page.locator('.queue-item')).toHaveCount(1);
