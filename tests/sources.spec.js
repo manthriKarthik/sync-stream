@@ -13,6 +13,7 @@ async function mockYouTube(page, { deferReady = false, blocked = false, bufferin
         const player = {
           loads: [],
           seeks: [],
+          hiddenStarts: [],
           state: -1,
           position: 0,
           muted: false,
@@ -30,6 +31,7 @@ async function mockYouTube(page, { deferReady = false, blocked = false, bufferin
             player.position = track.startSeconds;
           },
           playVideo() {
+            player.hiddenStarts.push(!!iframe.closest('[hidden]'));
             player.state = mock.buffering ? 3 : mock.blocked ? 5 : 1;
             options.events.onStateChange({ data: player.state, target: player });
             if (mock.blocked) options.events.onAutoplayBlocked?.({ target: player });
@@ -145,6 +147,51 @@ test('YouTube buffering is not interrupted by automatic retries', async ({ page 
   expect(await page.evaluate(() => window.__youtubeMock.players[0].loads.length)).toBe(1);
   expect(await page.evaluate(() => window.__youtubeMock.players[0].seeks)).toEqual([]);
   await expect(page.getByRole('button', { name: 'Play YouTube audio', exact: true })).toHaveCount(0);
+});
+
+test('YouTube starts visibly on add and a late listener can enable audio without host toggles', async ({ page, browser }, testInfo) => {
+  await mockYouTube(page);
+  await page.goto('/');
+  await createYouTubeRoom(page);
+  await addYouTubeTrack(page);
+  await expect.poll(() => page.evaluate(() => window.__youtubeMock.players[0].state)).toBe(1);
+  expect(await page.evaluate(() => window.__youtubeMock.players[0].hiddenStarts)).not.toContain(true);
+
+  const code = (await page.getByRole('button', { name: 'Copy room code' }).textContent()).trim();
+  const guestContext = await browser.newContext(testInfo.project.use);
+  try {
+    const guest = await guestContext.newPage();
+    await mockYouTube(guest, { deferReady: true, blocked: true });
+    await guest.goto(testInfo.project.use.baseURL);
+    await guest.getByRole('button', { name: 'Join a room', exact: true }).click();
+    await guest.getByLabel('Your name').fill('YouTube Listener');
+    await guest.getByLabel('Room code', { exact: true }).fill(code);
+    await guest.getByRole('button', { name: 'Join room', exact: true }).click();
+    await expect(guest.locator('.queue-item')).toHaveCount(1);
+    await guest.evaluate(() => window.__youtubeMock.players[0].ready());
+    await expect.poll(() => guest.evaluate(() => window.__youtubeMock.players[0].loads.length)).toBe(1);
+    const startsBeforeEnable = await guest.evaluate(() => {
+      window.__youtubeMock.blocked = false;
+      return window.__youtubeMock.players[0].hiddenStarts.length;
+    });
+    await guest.getByRole('button', { name: 'Enable audio', exact: true }).click();
+    await expect.poll(() => guest.evaluate(() => window.__youtubeMock.players[0].state)).toBe(1);
+    expect(await guest.evaluate(() => window.__youtubeMock.players[0].hiddenStarts.length)).toBe(startsBeforeEnable + 1);
+    await expect(guest.getByRole('button', { name: 'Pause', exact: true })).toBeDisabled();
+    expect(await guest.evaluate(() => window.__youtubeMock.players[0].hiddenStarts)).not.toContain(true);
+    expect(await page.evaluate(() => window.__youtubeMock.players[0].loads.length)).toBe(1);
+    await page.getByPlaceholder('Paste YouTube URL...').fill('https://www.youtube.com/watch?v=jfKfPfyJRdk');
+    await page.getByRole('button', { name: '+ Add', exact: true }).click();
+    await expect(guest.locator('.queue-item')).toHaveCount(2);
+    await page.getByRole('button', { name: 'Next', exact: true }).click();
+    for (const listener of [page, guest]) {
+      await expect.poll(() => listener.evaluate(() => window.__youtubeMock.players[0].loads.at(-1).videoId)).toBe('jfKfPfyJRdk');
+      await expect.poll(() => listener.evaluate(() => window.__youtubeMock.players[0].state)).toBe(1);
+      expect(await listener.evaluate(() => window.__youtubeMock.players[0].muted)).toBe(false);
+    }
+  } finally {
+    await guestContext.close();
+  }
 });
 
 test('music sources exclude Spotify and never load its SDK', async ({ page, request }) => {

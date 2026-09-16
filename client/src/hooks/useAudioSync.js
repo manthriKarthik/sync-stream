@@ -211,63 +211,56 @@ export function useAudioSync(socket, onEnded) {
   }, [clockOffset]);
 
   // Handle playback sync commands from server
-  useEffect(() => {
-    if (!socket) return;
+  const syncPlayback = useCallback((state) => {
+    const audio = audioRef.current;
+    // If the active track plays through a platform SDK (YouTube),
+    // keep the shared element silent so two songs never overlap.
+    if (!activeIsSharedRef.current) {
+      if (!audio.paused) audio.pause();
+      return;
+    }
+    if (audio.error && audio.src) {
+      audio.load();
+      recentLoadRef.current = Date.now();
+    }
+    const unchanged = isUnchangedSnapshot(playbackStateRef.current, state);
+    const preservePlayback = unchanged && !audio.paused;
+    playbackStateRef.current = state;
+    if (preservePlayback) return;
 
-    const handlePlaybackSync = (state) => {
-      const audio = audioRef.current;
-      // If the active track plays through a platform SDK (YouTube),
-      // keep the shared element silent so two songs never overlap.
-      if (!activeIsSharedRef.current) {
-        if (!audio.paused) audio.pause();
-        return;
-      }
-      if (audio.error && audio.src) {
-        audio.load();
-        recentLoadRef.current = Date.now();
-      }
-      const unchanged = isUnchangedSnapshot(playbackStateRef.current, state);
-      const preservePlayback = unchanged && !audio.paused;
-      playbackStateRef.current = state;
-      if (preservePlayback) return;
+    if (state.playing) {
+      const syncedNow = Date.now() + clockOffsetRef.current;
+      const elapsed = state.syncTime ? (syncedNow - state.syncTime) / 1000 : 0;
+      const targetPosition = state.position + Math.max(0, elapsed);
 
-      if (state.playing) {
-        const syncedNow = Date.now() + clockOffset;
-        const elapsed = state.syncTime ? (syncedNow - state.syncTime) / 1000 : 0;
-        const targetPosition = state.position + Math.max(0, elapsed);
-
-        if (audio.src) {
-          // Seek to correct position. Use a wider tolerance so tiny differences
-          // don't trigger a seek (each seek rebuffers on iOS -> audible cut).
-          const drift = Math.abs(audio.currentTime - targetPosition);
-          if (drift > (unchanged ? SOFT_DRIFT_LIMIT : 0.75)) {
-            audio.currentTime = targetPosition;
-          }
-
-          if (audio.paused) {
-            audio.playbackRate = 1.0;
-            audio.play().then(() => {
-              setNeedsGesture(false);
-            }).catch((err) => {
-              // Blocked by the browser's autoplay policy (typically iOS). Flag
-              // it so the Room can show a tap-to-play pill for this track.
-              console.error('Playback blocked:', err);
-              setIsPlaying(false);
-              setNeedsGesture(err.name === 'NotAllowedError');
-            });
-          }
+      if (audio.src) {
+        // Seek to correct position. Use a wider tolerance so tiny differences
+        // don't trigger a seek (each seek rebuffers on iOS -> audible cut).
+        const drift = Math.abs(audio.currentTime - targetPosition);
+        if (drift > (unchanged ? SOFT_DRIFT_LIMIT : 0.75)) {
+          audio.currentTime = targetPosition;
         }
-      } else {
-        audio.pause();
-        audio.playbackRate = 1.0;
-        audio.currentTime = state.position;
-        setIsPlaying(false);
-      }
-    };
 
-    socket.on('playback:sync', handlePlaybackSync);
-    return () => socket.off('playback:sync', handlePlaybackSync);
-  }, [socket, clockOffset]);
+        if (audio.paused) {
+          audio.playbackRate = 1.0;
+          audio.play().then(() => {
+            setNeedsGesture(false);
+          }).catch((err) => {
+            // Blocked by the browser's autoplay policy (typically iOS). Flag
+            // it so the Room can show a tap-to-play pill for this track.
+            console.error('Playback blocked:', err);
+            setIsPlaying(false);
+            setNeedsGesture(err.name === 'NotAllowedError');
+          });
+        }
+      }
+    } else {
+      audio.pause();
+      audio.playbackRate = 1.0;
+      audio.currentTime = state.position;
+      setIsPlaying(false);
+    }
+  }, []);
 
   // Time tracking animation
   useEffect(() => {
@@ -459,6 +452,7 @@ export function useAudioSync(socket, onEnded) {
     currentTime,
     duration,
     clockOffset,
+    syncPlayback,
     loadTrack,
     play,
     pause,

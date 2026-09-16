@@ -161,6 +161,7 @@ export function useYouTube(onEnded) {
   }, [apiReady, clearPlaybackCheck]);
 
   const playTrack = useCallback((videoId, positionSeconds = 0, fromGesture = false) => {
+    if (containerRef.current) containerRef.current.hidden = false;
     clearPlaybackCheck();
     setError(null);
     setNeedsGesture(false);

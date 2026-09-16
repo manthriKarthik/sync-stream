@@ -188,6 +188,28 @@ test('shared audio survives a hidden page and lock-screen controls act immediate
   expect(await page.evaluate(() => navigator.mediaSession.metadata)).toBeNull();
 });
 
+test('queued audio starts after the current song ends while hidden', async ({ page }) => {
+  await createRoom(page);
+  await page.getByRole('button', { name: 'Enable audio', exact: true }).click();
+  await page.getByRole('button', { name: 'Upload', exact: true }).click();
+  for (const name of ['First background song.wav', 'Next background song.wav']) {
+    await page.getByLabel('Audio file').setInputFiles({ name, mimeType: 'audio/wav', buffer: audioFixture() });
+    await expect(page.locator('.queue-item').filter({ hasText: name })).toHaveCount(1);
+  }
+  await page.getByRole('button', { name: 'Play', exact: true }).click();
+  await expect.poll(() => page.locator('audio').evaluate(audio => !audio.paused && audio.currentTime > 0)).toBe(true);
+  const firstSource = await page.locator('audio').evaluate(audio => {
+    Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
+    document.dispatchEvent(new Event('visibilitychange'));
+    audio.currentTime = audio.duration - 0.3;
+    return audio.src;
+  });
+  await expect.poll(() => page.locator('audio').evaluate(audio => audio.src)).not.toBe(firstSource);
+  await expect.poll(() => page.locator('audio').evaluate(audio => !audio.paused && audio.currentTime > 0.5)).toBe(true);
+  await page.getByRole('button', { name: 'Leave', exact: true }).click();
+});
+
 test('shared audio exposes a gesture fallback after an interrupted background session', async ({ page }) => {
   await createRoom(page);
   await page.getByRole('button', { name: 'Enable audio', exact: true }).click();

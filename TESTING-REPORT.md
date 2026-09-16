@@ -1,5 +1,48 @@
 # Reliability Verification
 
+## YouTube Startup Follow-up (2026-09-16)
+
+- Reproduced an ordering defect: adding the first YouTube song issued player
+  commands while its container was still hidden. The playback hook now reveals
+  the container before issuing commands, including inside the original gesture.
+- Platform sync reads the immediately updated queue reference. Enabling audio
+  on a listener no longer sends two consecutive YouTube play/seek requests.
+- Added host/late-listener coverage for startup visibility, delayed player
+  readiness, blocked autoplay, one local enable request, and both listeners
+  receiving the next queued video without host pause/play recovery.
+- Production build passed. All 40 room/source desktop/mobile scenarios passed
+  with no failures, skips, or flaky retries. The saved report is
+  `test-results/youtube-followup.json`; touched-code editor diagnostics passed.
+- Unmocked local smoke check: the real IFrame API loaded and accepted video
+  requests. One sample was unavailable; another exposed the local autoplay
+  fallback but did not sustain media playback after a recovery tap. The native
+  player remained buffering. This is not a passing live-playback verification.
+- YouTube tests use a controlled IFrame API mock, not audible live-provider
+  playback. A listener may need to tap Enable audio or Play YouTube audio on
+  their own device; a host gesture cannot grant another browser permission.
+  Physical phone and live YouTube checks remain outstanding. Background YouTube
+  restrictions are unchanged, and these changes have not been deployed.
+
+## Background Queue Follow-up (2026-09-16)
+
+- Reproduced a direct-audio queue transition failure with the document marked
+  hidden: the next source loaded but did not play. Separate socket listeners
+  could call play before loading the new source, cancelling that play request.
+  The recovery timer skipped hidden pages, leaving playback silent until return.
+- Source selection and playback sync now run in order in the same callback.
+  Queue events update an immediate reference so source selection does not wait
+  for React to render the new queue. Personal listener pause remains respected.
+- Added a regression using two uploaded WAV files, a real media-ended event,
+  and real Socket.IO sync. It checks that the next source changes and its audio
+  position advances without a foreground event.
+- Validation: production build passed; all 38 room/source Chromium desktop and
+  mobile scenarios and all 19 backend/unit/integration tests passed. No editor
+  diagnostics in the touched code.
+- Visibility is simulated. Physical phone locking, browser/OS suspension,
+  live provider streams, and Bluetooth output still require device testing.
+  Embedded YouTube background restrictions remain unchanged. Local changes
+  have not been deployed to the hosted app.
+
 ## Phone Playback Follow-up (2026-09-15)
 
 - Reported device: Samsung Galaxy S24, website in a phone browser, apparently

@@ -15,6 +15,7 @@ import { Headphones, LogOut, Volume2, VolumeX, ListMusic, Music2 } from 'lucide-
 
 function Room({ socket, roomState, setRoomState, username, userId, onLeave, connected }) {
   const [queue, setQueue] = useState(roomState?.queue || []);
+  const queueRef = useRef(queue);
   const [members, setMembers] = useState(roomState?.members || []);
   const [mode, setMode] = useState(roomState?.mode || 'host');
   const [currentTrackIndex, setCurrentTrackIndex] = useState(
@@ -54,6 +55,7 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
     needsGesture: audioNeedsGesture,
     currentTime,
     duration,
+    syncPlayback,
     loadTrack,
     play,
     pause,
@@ -174,6 +176,7 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
     if (!socket) return;
 
     const handleQueueUpdate = (newQueue) => {
+      queueRef.current = newQueue;
       // Keep the currently-playing track selected even if items before it were
       // removed (removing an earlier/finished song shifts indexes down, which
       // would otherwise leave currentTrackIndex pointing past the end and
@@ -222,7 +225,10 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
       setCurrentTrackIndex(state.playbackState?.trackIndex ?? 0);
       setMembers(state.members || []);
       setMode(state.mode || 'host');
-      if (Array.isArray(state.queue)) setQueue(state.queue);
+      if (Array.isArray(state.queue)) {
+        queueRef.current = state.queue;
+        setQueue(state.queue);
+      }
       setRoomState(state);
     };
     const handleKicked = () => {
@@ -231,9 +237,12 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
     };
 
     const handlePlaybackSync = (state) => {
-      if (state.trackIndex !== currentTrackIndex && queue[state.trackIndex]) {
+      const nextTrack = queueRef.current[state.trackIndex];
+      if (nextTrack) {
         setCurrentTrackIndex(state.trackIndex);
-        const nextTrack = queue[state.trackIndex];
+        const isShared = nextTrack.platform !== 'youtube';
+        setSharedActive(isShared && !localPlaybackPausedRef.current);
+        if (isShared) youtube.pause();
         // Only feed the shared <audio> engine for direct-URL tracks (Audius /
         // uploads). YouTube plays through its own SDK and must NOT
         // pollute the shared audio element or they interfere with each other.
@@ -247,6 +256,7 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
             loadTrack(nextTrack.url);
           }
         }
+        syncPlayback(state);
       }
     };
 
@@ -328,7 +338,7 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
       pendingPlatformRef.current = state;
       setPlatformPlaying(!!state.playing);
 
-      const track = queue[state.trackIndex];
+      const track = queueRef.current[state.trackIndex];
       if (!track) return; // queue not ready yet — applied by the effect below
       pendingPlatformRef.current = null;
       if (unchanged || localPlaybackPausedRef.current) return;
@@ -724,8 +734,6 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
     // pause fires asynchronously and would silence the track we start below,
     // which was why a joining listener heard nothing until the host toggled
     // play/pause. The window-level unlock handler already blesses the element.
-    // Unlock the YouTube IFrame player (applies any pending synced track)
-    youtube.unlock();
     setAudioEnabled(true);
 
     // Start the currently-active track INSIDE this user gesture so mobile
