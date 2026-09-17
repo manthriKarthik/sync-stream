@@ -1,6 +1,24 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { MessageCircle, X, Volume2, VolumeX } from 'lucide-react';
 
+// Deterministic, attractive avatar gradient per listener (stable across renders).
+// Curated palette tuned for the dark aurora theme — vivid but not harsh.
+const AVATAR_GRADIENTS = [
+  'linear-gradient(135deg, #7c6cff, #5b8def)', // violet → blue
+  'linear-gradient(135deg, #22d3ee, #3b82f6)', // cyan → blue
+  'linear-gradient(135deg, #fb7185, #e24aa0)', // rose → pink
+  'linear-gradient(135deg, #34d399, #0ea5a5)', // emerald → teal
+  'linear-gradient(135deg, #fbbf24, #fb7185)', // amber → coral
+  'linear-gradient(135deg, #e879f9, #9333ea)', // fuchsia → purple
+  'linear-gradient(135deg, #38bdf8, #2dd4bf)', // sky → teal
+  'linear-gradient(135deg, #fb923c, #f43f5e)'  // orange → rose
+];
+function avatarGradient(key = '') {
+  let hash = 0;
+  for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) | 0;
+  return AVATAR_GRADIENTS[Math.abs(hash) % AVATAR_GRADIENTS.length];
+}
+
 function MembersPanel({ members, hostId, hostUserId, currentUserId, isHost, socket, roomId, connected }) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([]);
@@ -119,9 +137,9 @@ function MembersPanel({ members, hostId, hostUserId, currentUserId, isHost, sock
             className="chat-toast-avatar"
             style={{
               background: toast.userId === hostUserId
-                ? 'linear-gradient(135deg, #ffd700, #ff8c00)'
+                ? 'linear-gradient(135deg, #ffffff, #c4cde0)'
                 : 'var(--accent)',
-              color: toast.userId === hostUserId ? '#1a1a24' : '#fff'
+              color: toast.userId === hostUserId ? '#14161f' : '#fff'
             }}
           >
             {toast.username?.charAt(0)?.toUpperCase() || '?'}
@@ -216,44 +234,50 @@ function MembersPanel({ members, hostId, hostUserId, currentUserId, isHost, sock
                   className={`member-row${isMemberHost ? ' is-host' : ''}${member.muted ? ' is-muted' : ''}`}
                 >
                   <div className={`member-avatar-wrap${isMemberHost ? ' is-host' : ''}`}>
-                    <div className="member-avatar">{initial}</div>
-                    {isMemberHost && <span className="member-crown">👑</span>}
+                    <div
+                      className="member-avatar"
+                      style={isMemberHost ? undefined : { background: avatarGradient(member.userId || member.id), color: '#fff' }}
+                    >
+                      {initial}
+                    </div>
                     <span className={`member-presence${member.muted ? ' muted' : ''}`} />
                   </div>
 
                   <div className="member-info">
-                    <div className="member-name-row">
-                      <span className="member-name">{member.username}</span>
+                    <span className="member-name">{member.username}</span>
+                    <span className={`member-status${member.muted ? ' muted' : ''}`}>
+                      {member.muted ? <VolumeX size={12} /> : <Volume2 size={12} />}
+                      {member.muted ? 'Muted' : 'Listening'}
+                    </span>
+                  </div>
+
+                  <div className="member-trailing">
+                    <div className="member-tags">
                       {isMe && <span className="chip chip-you">You</span>}
                       {isMemberHost && <span className="chip chip-host">Host</span>}
                       {!isMemberHost && member.canControl && <span className="chip chip-dj">DJ</span>}
                     </div>
-                    <div className={`member-status${member.muted ? ' muted' : ''}`}>
-                      {member.muted ? <VolumeX size={12} /> : <Volume2 size={12} />}
-                      {member.muted ? 'Muted' : 'Listening'}
-                    </div>
+                    {isHost && !isMemberHost && (
+                      <div className="member-actions">
+                        <button
+                          className={`member-btn${member.canControl ? ' active' : ''}`}
+                          onClick={() => toggleControl(member, !member.canControl)}
+                          disabled={!connected}
+                          title={member.canControl ? 'Revoke playback control' : 'Give playback control'}
+                        >
+                          {member.canControl ? 'Revoke' : 'Make DJ'}
+                        </button>
+                        <button
+                          className="member-btn member-btn-danger"
+                          onClick={() => kickMember(member)}
+                          disabled={!connected}
+                          title="Remove from room"
+                        >
+                          Kick
+                        </button>
+                      </div>
+                    )}
                   </div>
-
-                  {isHost && !isMemberHost && (
-                    <div className="member-actions">
-                      <button
-                        className={`member-btn${member.canControl ? ' active' : ''}`}
-                        onClick={() => toggleControl(member, !member.canControl)}
-                        disabled={!connected}
-                        title={member.canControl ? 'Revoke playback control' : 'Give playback control'}
-                      >
-                        {member.canControl ? 'Revoke' : 'Make DJ'}
-                      </button>
-                      <button
-                        className="member-btn member-btn-danger"
-                        onClick={() => kickMember(member)}
-                        disabled={!connected}
-                        title="Remove from room"
-                      >
-                        Kick
-                      </button>
-                    </div>
-                  )}
                 </li>
               );
             })}
@@ -283,7 +307,7 @@ function MembersPanel({ members, hostId, hostUserId, currentUserId, isHost, sock
                 return (
                   <div
                     key={i}
-                    className={`chat-msg${isOwn ? ' chat-msg-own' : ''}${isHostMsg ? ' chat-msg-host' : ''}`}
+                    className={`chat-msg${isOwn ? ' chat-msg-own' : ''}${isHostMsg && !isOwn ? ' chat-msg-host' : ''}`}
                   >
                     {!isOwn && (
                       <div className="chat-msg-name">
