@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { MessageCircle, X } from 'lucide-react';
+import { MessageCircle, X, Volume2, VolumeX } from 'lucide-react';
 
 function MembersPanel({ members, hostId, hostUserId, currentUserId, isHost, socket, roomId, connected }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -197,162 +197,62 @@ function MembersPanel({ members, hostId, hostUserId, currentUserId, isHost, sock
         }}
       >
         {/* Members Section */}
-        <div style={{ padding: 20, borderBottom: '1px solid var(--border)' }}>
-          <h3 style={{
-            fontSize: 14,
-            fontWeight: 600,
-            marginBottom: 16,
-            color: 'var(--text-secondary)',
-            textTransform: 'uppercase',
-            letterSpacing: '0.5px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8
-          }}>
-            <span>👥</span> Listeners ({members.length})
-          </h3>
-          <ul style={{ listStyle: 'none', maxHeight: 200, overflowY: 'auto' }}>
+        <div className="panel-section panel-members">
+          <div className="panel-section-head">
+            <span className="panel-section-title">Listeners</span>
+            <span className="panel-live-count" title="People currently listening">
+              <span className="listener-dot" />
+              {members.filter(m => !m.muted).length}/{members.length} live
+            </span>
+          </div>
+          <ul className="member-list">
             {members.map((member) => {
               const isMemberHost = hostUserId ? member.userId === hostUserId : member.id === hostId;
+              const isMe = member.userId === currentUserId;
+              const initial = member.username?.charAt(0)?.toUpperCase() || '?';
               return (
                 <li
                   key={member.id}
-                  className="panel-member"
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 10,
-                    padding: '10px 8px',
-                    borderRadius: 8,
-                    marginBottom: 4,
-                    background: isMemberHost
-                      ? 'linear-gradient(135deg, rgba(255,215,0,0.15), rgba(255,140,0,0.1))'
-                      : 'transparent',
-                    border: isMemberHost ? '1px solid rgba(255,215,0,0.3)' : '1px solid transparent'
-                  }}
+                  className={`member-row${isMemberHost ? ' is-host' : ''}${member.muted ? ' is-muted' : ''}`}
                 >
-                  {/* Avatar */}
-                  <div
-                    className={isMemberHost ? 'panel-avatar panel-avatar-host' : 'panel-avatar'}
-                    style={{
-                    width: 36,
-                    height: 36,
-                    borderRadius: '50%',
-                    background: isMemberHost
-                      ? 'linear-gradient(135deg, #ffd700, #ff8c00)'
-                      : 'var(--accent)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: 14,
-                    fontWeight: 600,
-                    color: isMemberHost ? '#1a1a24' : '#fff',
-                    boxShadow: isMemberHost ? '0 0 12px rgba(255,215,0,0.5)' : 'none',
-                    position: 'relative'
-                  }}>
-                    {member.username?.charAt(0)?.toUpperCase() || '?'}
-                    {isMemberHost && (
-                      <span style={{
-                        position: 'absolute',
-                        bottom: -2,
-                        right: -2,
-                        fontSize: 12
-                      }}>👑</span>
-                    )}
+                  <div className={`member-avatar-wrap${isMemberHost ? ' is-host' : ''}`}>
+                    <div className="member-avatar">{initial}</div>
+                    {isMemberHost && <span className="member-crown">👑</span>}
+                    <span className={`member-presence${member.muted ? ' muted' : ''}`} />
                   </div>
 
-                  {/* Name */}
-                  <span style={{
-                    flex: 1,
-                    fontSize: 14,
-                    fontWeight: isMemberHost ? 600 : 500,
-                    color: isMemberHost ? '#ffd700' : 'var(--text-primary)'
-                  }}>
-                    {member.username}
-                  </span>
+                  <div className="member-info">
+                    <div className="member-name-row">
+                      <span className="member-name">{member.username}</span>
+                      {isMe && <span className="chip chip-you">You</span>}
+                      {isMemberHost && <span className="chip chip-host">Host</span>}
+                      {!isMemberHost && member.canControl && <span className="chip chip-dj">DJ</span>}
+                    </div>
+                    <div className={`member-status${member.muted ? ' muted' : ''}`}>
+                      {member.muted ? <VolumeX size={12} /> : <Volume2 size={12} />}
+                      {member.muted ? 'Muted' : 'Listening'}
+                    </div>
+                  </div>
 
-                  {/* Host badge */}
-                  {isMemberHost && (
-                    <span style={{
-                      fontSize: 10,
-                      padding: '3px 8px',
-                      borderRadius: 4,
-                      background: 'linear-gradient(135deg, #ffd700, #ff8c00)',
-                      color: '#1a1a24',
-                      fontWeight: 700,
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.5px'
-                    }}>
-                      HOST
-                    </span>
-                  )}
-
-                  {/* DJ badge: member the host granted playback control (visible to all) */}
-                  {!isMemberHost && member.canControl && (
-                    <span style={{
-                      fontSize: 10,
-                      padding: '3px 8px',
-                      borderRadius: 4,
-                      background: 'linear-gradient(135deg, #7c3aed, #a855f7)',
-                      color: '#fff',
-                      fontWeight: 700,
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.5px'
-                    }}>
-                      DJ
-                    </span>
-                  )}
-
-                  {/* Give / Revoke control (host only, not on themselves) */}
                   {isHost && !isMemberHost && (
-                    <button
-                      onClick={() => toggleControl(member, !member.canControl)}
-                      disabled={!connected}
-                      title={member.canControl ? 'Revoke playback control' : 'Give playback control'}
-                      style={{
-                        background: member.canControl ? 'rgba(124,58,237,0.25)' : 'rgba(255,255,255,0.08)',
-                        border: member.canControl ? '1px solid rgba(124,58,237,0.5)' : '1px solid var(--border)',
-                        borderRadius: 6,
-                        padding: '4px 8px',
-                        color: member.canControl ? '#a855f7' : 'var(--text-secondary)',
-                        fontSize: 11,
-                        fontWeight: 500,
-                        cursor: 'pointer',
-                        whiteSpace: 'nowrap',
-                        transition: 'all 0.2s'
-                      }}
-                    >
-                      {member.canControl ? 'Revoke' : 'Give control'}
-                    </button>
-                  )}
-
-                  {/* Kick button (only for host, not on themselves) */}
-                  {isHost && !isMemberHost && (
-                    <button
-                      onClick={() => kickMember(member)}
-                      disabled={!connected}
-                      style={{
-                        background: 'rgba(239,68,68,0.2)',
-                        border: '1px solid rgba(239,68,68,0.3)',
-                        borderRadius: 6,
-                        padding: '4px 8px',
-                        color: '#ef4444',
-                        fontSize: 11,
-                        fontWeight: 500,
-                        cursor: 'pointer',
-                        transition: 'all 0.2s'
-                      }}
-                      onMouseOver={(e) => {
-                        e.target.style.background = '#ef4444';
-                        e.target.style.color = '#fff';
-                      }}
-                      onMouseOut={(e) => {
-                        e.target.style.background = 'rgba(239,68,68,0.2)';
-                        e.target.style.color = '#ef4444';
-                      }}
-                    >
-                      Kick
-                    </button>
+                    <div className="member-actions">
+                      <button
+                        className={`member-btn${member.canControl ? ' active' : ''}`}
+                        onClick={() => toggleControl(member, !member.canControl)}
+                        disabled={!connected}
+                        title={member.canControl ? 'Revoke playback control' : 'Give playback control'}
+                      >
+                        {member.canControl ? 'Revoke' : 'Make DJ'}
+                      </button>
+                      <button
+                        className="member-btn member-btn-danger"
+                        onClick={() => kickMember(member)}
+                        disabled={!connected}
+                        title="Remove from room"
+                      >
+                        Kick
+                      </button>
+                    </div>
                   )}
                 </li>
               );
@@ -361,75 +261,38 @@ function MembersPanel({ members, hostId, hostUserId, currentUserId, isHost, sock
         </div>
 
         {/* Chat Section */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-          <h3 style={{
-            fontSize: 14,
-            fontWeight: 600,
-            padding: '16px 20px 12px',
-            color: 'var(--text-secondary)',
-            textTransform: 'uppercase',
-            letterSpacing: '0.5px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8
-          }}>
-            <span>💬</span> Live Chat
-          </h3>
+        <div className="panel-section panel-chat">
+          <div className="panel-section-head">
+            <span className="panel-section-title">Live Chat</span>
+          </div>
 
           {/* Messages */}
-          <div style={{
-            flex: 1,
-            overflowY: 'auto',
-            padding: '0 20px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 8
-          }}>
+          <div className="chat-messages">
             {messages.length === 0 ? (
-              <p style={{
-                textAlign: 'center',
-                color: 'var(--text-muted)',
-                fontSize: 13,
-                padding: 20
-              }}>
-                No messages yet. Start the conversation! 🎵
-              </p>
+              <div className="chat-empty">
+                <span className="chat-empty-icon">💬</span>
+                <p>No messages yet.<br />Start the conversation!</p>
+              </div>
             ) : (
               messages.map((msg, i) => {
                 const isHostMsg = msg.userId === hostUserId;
                 const isOwn = msg.userId === currentUserId;
+                const time = msg.timestamp
+                  ? new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                  : '';
                 return (
                   <div
                     key={i}
-                    className={isOwn ? 'chat-msg chat-msg-own' : 'chat-msg'}
-                    style={{
-                      padding: '8px 12px',
-                      borderRadius: 12,
-                      background: isHostMsg
-                        ? 'linear-gradient(135deg, rgba(255,215,0,0.15), rgba(255,140,0,0.1))'
-                        : isOwn
-                          ? 'var(--accent-glow)'
-                          : 'var(--bg-tertiary)',
-                      border: isHostMsg ? '1px solid rgba(255,215,0,0.2)' : 'none',
-                      maxWidth: '85%',
-                      alignSelf: isOwn ? 'flex-end' : 'flex-start'
-                    }}
+                    className={`chat-msg${isOwn ? ' chat-msg-own' : ''}${isHostMsg ? ' chat-msg-host' : ''}`}
                   >
-                    <div style={{
-                      fontSize: 11,
-                      fontWeight: 600,
-                      marginBottom: 4,
-                      color: isHostMsg ? '#ffd700' : 'var(--accent)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 4
-                    }}>
-                      {msg.username}
-                      {isHostMsg && <span>👑</span>}
-                    </div>
-                    <div style={{ fontSize: 13, color: 'var(--text-primary)' }}>
-                      {msg.message}
-                    </div>
+                    {!isOwn && (
+                      <div className="chat-msg-name">
+                        {msg.username}
+                        {isHostMsg && <span>👑</span>}
+                      </div>
+                    )}
+                    <div className="chat-msg-text">{msg.message}</div>
+                    {time && <span className="chat-msg-time">{time}</span>}
                   </div>
                 );
               })
@@ -440,28 +303,21 @@ function MembersPanel({ members, hostId, hostUserId, currentUserId, isHost, sock
           {/* Input */}
           <form
             onSubmit={sendMessage}
-            style={{
-              padding: 16,
-              borderTop: '1px solid var(--border)',
-              display: 'flex',
-              gap: 8
-            }}
+            className="chat-input-bar"
           >
             <input
               type="text"
-              className="input"
+              className="input chat-input"
               placeholder="Type a message..."
               aria-label="Chat message"
               maxLength={2000}
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
-              style={{ flex: 1, fontSize: 13 }}
             />
             <button
               type="submit"
-              className="btn btn-primary"
+              className="btn btn-primary chat-send"
               disabled={!connected || !newMessage.trim()}
-              style={{ padding: '10px 16px' }}
             >
               Send
             </button>

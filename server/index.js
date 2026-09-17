@@ -951,6 +951,14 @@ io.on('connection', (socket) => {
     io.to(roomId).emit('room:control-changed', { memberId, allowed: !!allowed });
   });
 
+  // Broadcast a listener's personal mute state so everyone sees who's listening
+  socket.on('room:set-mute', ({ roomId, muted }) => {
+    const room = roomManager.getRoom(roomId);
+    if (!room || !room.members[socket.id]) return;
+    if (!roomManager.setMemberMute(roomId, socket.id, muted)) return;
+    io.to(roomId).emit('room:mute-changed', { memberId: socket.id, muted: !!muted });
+  });
+
   // Kick a member (host only)
   socket.on('room:kick', ({ roomId, memberId }) => {
     const room = roomManager.getRoom(roomId);

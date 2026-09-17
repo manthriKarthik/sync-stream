@@ -206,6 +206,9 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
     const handleControlChanged = ({ memberId, allowed }) => {
       setMembers(prev => prev.map(m => (m.id === memberId ? { ...m, canControl: allowed } : m)));
     };
+    const handleMuteChanged = ({ memberId, muted }) => {
+      setMembers(prev => prev.map(m => (m.id === memberId ? { ...m, muted } : m)));
+    };
     const handleHostChanged = ({ newHostId, newHostUserId }) => {
       setRoomState(prev => ({ ...prev, hostId: newHostId, hostUserId: newHostUserId ?? prev.hostUserId }));
     };
@@ -258,6 +261,7 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
     socket.on('room:member-left', handleMemberLeft);
     socket.on('room:mode-changed', handleModeChanged);
     socket.on('room:control-changed', handleControlChanged);
+    socket.on('room:mute-changed', handleMuteChanged);
     socket.on('room:host-changed', handleHostChanged);
     socket.on('room:state', handleRoomState);
     socket.on('room:kicked', handleKicked);
@@ -270,6 +274,7 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
       socket.off('room:member-left', handleMemberLeft);
       socket.off('room:mode-changed', handleModeChanged);
       socket.off('room:control-changed', handleControlChanged);
+      socket.off('room:mute-changed', handleMuteChanged);
       socket.off('room:host-changed', handleHostChanged);
       socket.off('room:state', handleRoomState);
       socket.off('room:kicked', handleKicked);
@@ -704,6 +709,10 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
     setPersonalMuted((prev) => {
       const next = !prev;
       applyPersonalMute(next);
+      // Tell the room so everyone sees who is listening vs muted.
+      if (socket?.connected && roomState?.id) {
+        socket.emit('room:set-mute', { roomId: roomState.id, muted: next });
+      }
       // Coming back: re-sync so a slightly-drifted device snaps to the room.
       if (!next && socket && roomState?.id) {
         socket.emit('playback:request-sync', { roomId: roomState.id });

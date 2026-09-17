@@ -324,9 +324,15 @@ test('two listeners exchange chat, receive control, and transfer host on leave',
   await page.getByPlaceholder('Type a message...').fill('This is our song.');
   await page.getByRole('button', { name: 'Send', exact: true }).click();
   await expect(guest.locator('.chat-msg')).toContainText('This is our song.');
-  await page.getByRole('button', { name: 'Give control', exact: true }).click();
+  await page.getByRole('button', { name: 'Make DJ', exact: true }).click();
   await expect(guest.getByText('DJ', { exact: true })).toBeVisible();
   await guest.getByRole('button', { name: 'Close listeners and chat' }).click();
+  // Mute status is shared: when the guest mutes, the host sees it in the panel.
+  await expect(page.locator('.member-row', { hasText: 'Jamie' }).getByText('Listening', { exact: true })).toBeVisible();
+  await guest.getByRole('button', { name: 'Listening', exact: true }).click();
+  await expect(page.locator('.member-row', { hasText: 'Jamie' }).getByText('Muted', { exact: true })).toBeVisible();
+  await guest.getByRole('button', { name: 'Muted', exact: true }).click();
+  await expect(page.locator('.member-row', { hasText: 'Jamie' }).getByText('Listening', { exact: true })).toBeVisible();
   await guest.getByRole('button', { name: 'Pause', exact: true }).click();
   await expect.poll(() => page.locator('audio').evaluate(audio => audio.paused)).toBe(true);
   await guest.getByRole('button', { name: 'Open listeners and chat' }).click();
@@ -439,7 +445,7 @@ test('a reconnecting guest applies missed pause and track changes without duplic
     await expect(guest.locator('.player-track-info')).toContainText('Second track.wav');
     await expect.poll(() => guest.locator('audio').evaluate(audio => !audio.paused && audio.currentTime > 0)).toBe(true);
     await guest.getByRole('button', { name: 'Open listeners and chat' }).click();
-    await expect(guest.locator('.panel-member')).toHaveCount(2);
+    await expect(guest.locator('.member-row')).toHaveCount(2);
   } finally {
     await guestContext.close();
     await page.getByRole('button', { name: 'Leave', exact: true }).click();

@@ -67,6 +67,26 @@ test('reconnecting host reclaims the host socket', () => {
   assert.equal(manager.getRoomState(room.id).members[0].isHost, true);
 });
 
+test('member mute state is shared in room state and survives reconnect', () => {
+  const manager = new RoomManager();
+  const room = manager.createRoom('Test room', 'host', 'Host', 'host-user');
+  manager.addMember(room.id, 'listener', 'Listener', 'listener-user');
+
+  const before = manager.getRoomState(room.id).members.find(m => m.id === 'listener');
+  assert.equal(before.muted, false);
+
+  assert.equal(manager.setMemberMute(room.id, 'listener', true), true);
+  const muted = manager.getRoomState(room.id).members.find(m => m.id === 'listener');
+  assert.equal(muted.muted, true);
+
+  manager.addMember(room.id, 'listener-2', 'Listener', 'listener-user');
+  assert.equal(room.members['listener-2'].muted, true);
+
+  assert.equal(manager.setMemberMute(room.id, 'listener-2', false), true);
+  assert.equal(room.members['listener-2'].muted, false);
+  assert.equal(manager.setMemberMute(room.id, 'ghost', true), false);
+});
+
 test('granted controls survive a full disconnect and revoked controls stay revoked', () => {
   const manager = new RoomManager();
   const room = manager.createRoom('Test room', 'host', 'Host', 'host-user');
