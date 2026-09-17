@@ -324,8 +324,10 @@ test('two listeners exchange chat, receive control, and transfer host on leave',
   await page.getByPlaceholder('Type a message...').fill('This is our song.');
   await page.getByRole('button', { name: 'Send', exact: true }).click();
   await expect(guest.locator('.chat-msg')).toContainText('This is our song.');
-  await page.getByRole('button', { name: 'Make DJ', exact: true }).click();
-  await expect(guest.getByText('DJ', { exact: true })).toBeVisible();
+  // Let everyone control playback so the guest can pause below.
+  await page.getByRole('button', { name: 'Close listeners and chat' }).click();
+  await page.getByRole('button', { name: 'Everyone', exact: true }).click();
+  await page.getByRole('button', { name: 'Open listeners and chat' }).click();
   await guest.getByRole('button', { name: 'Close listeners and chat' }).click();
   // Mute status is shared: when the guest mutes, the host sees it in the panel.
   await expect(page.locator('.member-row', { hasText: 'Jamie' }).getByText('Listening', { exact: true })).toBeVisible();

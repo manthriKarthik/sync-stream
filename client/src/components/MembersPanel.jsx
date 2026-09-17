@@ -120,11 +120,6 @@ function MembersPanel({ members, hostId, hostUserId, currentUserId, isHost, sock
     socket.emit('room:kick', { roomId, memberId: member.id });
   };
 
-  const toggleControl = (member, allowed) => {
-    if (!isHost || !connected || !socket?.connected || member.userId === hostUserId) return;
-    socket.emit('room:set-control', { roomId, memberId: member.id, allowed });
-  };
-
   return (
     <>
       {/* Chat pop-up notification (shown when a message arrives and panel is closed) */}
@@ -255,18 +250,9 @@ function MembersPanel({ members, hostId, hostUserId, currentUserId, isHost, sock
                     <div className="member-tags">
                       {isMe && <span className="chip chip-you">You</span>}
                       {isMemberHost && <span className="chip chip-host">Host</span>}
-                      {!isMemberHost && member.canControl && <span className="chip chip-dj">DJ</span>}
                     </div>
                     {isHost && !isMemberHost && (
                       <div className="member-actions">
-                        <button
-                          className={`member-btn${member.canControl ? ' active' : ''}`}
-                          onClick={() => toggleControl(member, !member.canControl)}
-                          disabled={!connected}
-                          title={member.canControl ? 'Revoke playback control' : 'Give playback control'}
-                        >
-                          {member.canControl ? 'Revoke' : 'Make DJ'}
-                        </button>
                         <button
                           className="member-btn member-btn-danger"
                           onClick={() => kickMember(member)}
