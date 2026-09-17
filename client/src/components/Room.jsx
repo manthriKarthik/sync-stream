@@ -996,7 +996,20 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
           ref={youtube.containerRef}
           hidden={!isPlatformTrack}
           style={{ position: 'relative', width: '100%', maxWidth: 640, minHeight: 200, aspectRatio: '16 / 9', marginBottom: 24 }}
-        />
+        >
+          {/* Audio-only cover: keeps the iframe playing (YouTube blocks autoplay
+              on hidden players) while hiding the video image. */}
+          {isPlatformTrack && (
+            <div className="yt-audio-cover" aria-hidden="true">
+              {activeTrack?.albumArt && (
+                <img src={activeTrack.albumArt} alt="" className="yt-audio-cover-art" />
+              )}
+              <div className="yt-audio-cover-label">
+                <Music2 size={18} />Audio only
+              </div>
+            </div>
+          )}
+        </div>
         <PlatformConnect
           connected={connected}
           youtube={youtube}

@@ -216,11 +216,11 @@ function PlatformConnect({ youtube, audius, saavn, soundcloud, roomId, userId, o
         </div>
       )}
 
-      {/* YouTube - always available */}
+      {/* YouTube - always available (audio only) */}
       {activeTab === 'youtube' && (
         <div>
           <p style={{ fontSize: 12, color: 'var(--success)', marginBottom: 12 }}>
-            ✓ No login required — works for everyone
+            ✓ Audio only • no login required — works for everyone
           </p>
 
           {/* Paste URL */}
