@@ -991,25 +991,14 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
             </button>
           </div>
         )}
+        {/* Audio-only YouTube: the player stays mounted (YouTube blocks autoplay
+            on display:none players) but is kept offscreen so no video shows. */}
         <div
           id="yt-player-container"
           ref={youtube.containerRef}
           hidden={!isPlatformTrack}
-          style={{ position: 'relative', width: '100%', maxWidth: 640, minHeight: 200, aspectRatio: '16 / 9', marginBottom: 24 }}
-        >
-          {/* Audio-only cover: keeps the iframe playing (YouTube blocks autoplay
-              on hidden players) while hiding the video image. */}
-          {isPlatformTrack && (
-            <div className="yt-audio-cover" aria-hidden="true">
-              {activeTrack?.albumArt && (
-                <img src={activeTrack.albumArt} alt="" className="yt-audio-cover-art" />
-              )}
-              <div className="yt-audio-cover-label">
-                <Music2 size={18} />Audio only
-              </div>
-            </div>
-          )}
-        </div>
+          style={{ position: 'absolute', width: 1, height: 1, left: -9999, top: 'auto', opacity: 0, overflow: 'hidden', pointerEvents: 'none' }}
+        />
         <PlatformConnect
           connected={connected}
           youtube={youtube}
