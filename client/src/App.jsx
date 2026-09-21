@@ -21,16 +21,48 @@ function getPersistentUserId() {
   }
 }
 
+// The active room session survives a full page refresh so we can auto-rejoin
+// instead of dropping the user back on the landing page.
+function loadSession() {
+  try {
+    const raw = localStorage.getItem('sonin_session');
+    const s = raw ? JSON.parse(raw) : null;
+    return s && s.roomId && s.username ? s : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveSession(session) {
+  try {
+    if (session && session.roomId && session.username) {
+      localStorage.setItem('sonin_session', JSON.stringify(session));
+    } else {
+      localStorage.removeItem('sonin_session');
+    }
+  } catch {
+    // ignore storage failures (private mode, quota)
+  }
+}
+
 function App() {
+  const restoredSessionRef = useRef(loadSession());
   const [view, setView] = useState('landing'); // 'landing' | 'room'
   const [roomState, setRoomState] = useState(null);
-  const [username, setUsername] = useState('');
+  const [username, setUsername] = useState(restoredSessionRef.current?.username || '');
   const [error, setError] = useState('');
   const [pending, setPending] = useState(false);
   const requestTimerRef = useRef(null);
   const userIdRef = useRef(getPersistentUserId());
-  // Remembers the current room so we can auto-rejoin after a reconnect.
-  const sessionRef = useRef(null); // { roomId, username }
+  // Remembers the current room so we can auto-rejoin after a reconnect or a
+  // full page refresh. Restored from localStorage so a reload rejoins the room.
+  const sessionRef = useRef(restoredSessionRef.current); // { roomId, username }
+
+  // Set the active session and mirror it to storage in one place.
+  const setSession = (next) => {
+    sessionRef.current = next;
+    saveSession(next);
+  };
   // True only while a user-initiated join/create is in flight, so we can tell a
   // manual "wrong code" from a silent auto-rejoin that failed (e.g. the server
   // restarted and wiped the in-memory room).
@@ -44,13 +76,13 @@ function App() {
       manualJoinRef.current = false;
       setRoomState(state);
       setView('room');
-      sessionRef.current = {
+      setSession({
         roomId: state.id,
         username: sessionRef.current?.username || state.members?.find(m => m.userId === userIdRef.current)?.username
-      };
+      });
     },
     onRoomCreated: (room) => {
-      sessionRef.current = { roomId: room.id, username: sessionRef.current?.username };
+      setSession({ roomId: room.id, username: sessionRef.current?.username });
     },
     onError: (error) => {
       clearTimeout(requestTimerRef.current);
@@ -59,12 +91,12 @@ function App() {
       // NOT show the scary "check the code" popup — the user did nothing wrong.
       // Quietly send them back to the landing page instead.
       if (error?.code === 'ROOM_NOT_FOUND' && !manualJoinRef.current) {
-        sessionRef.current = null;
+        setSession(null);
         setRoomState(null);
         setView('landing');
         return;
       }
-      if (manualJoinRef.current) sessionRef.current = null;
+      if (manualJoinRef.current) setSession(null);
       manualJoinRef.current = false;
       setError(error?.message || 'Something went wrong. Please try again.');
     }
@@ -81,6 +113,9 @@ function App() {
       }
     };
     socket.on('connect', onConnect);
+    // The socket may already be connected before this effect runs (e.g. after a
+    // page refresh), in which case the 'connect' event won't fire again.
+    if (socket.connected) onConnect();
     return () => socket.off('connect', onConnect);
   }, [socket]);
 
@@ -91,7 +126,7 @@ function App() {
     setError('');
     requestTimerRef.current = setTimeout(() => {
       manualJoinRef.current = false;
-      sessionRef.current = null;
+      setSession(null);
       setPending(false);
       setError('The connection timed out. Please try again.');
     }, 10000);
@@ -103,7 +138,7 @@ function App() {
   const handleCreateRoom = (name, user) => {
     if (!beginRequest()) return;
     setUsername(user);
-    sessionRef.current = { username: user };
+    setSession({ username: user });
     socket.emit('room:create', { username: user, roomName: name, userId: userIdRef.current });
   };
 
@@ -111,14 +146,14 @@ function App() {
     if (!beginRequest()) return;
     setUsername(user);
     manualJoinRef.current = true;
-    sessionRef.current = { roomId: roomId?.trim()?.toLowerCase(), username: user };
+    setSession({ roomId: roomId?.trim()?.toLowerCase(), username: user });
     socket.emit('room:join', { roomId, username: user, userId: userIdRef.current });
   };
 
   const handleLeaveRoom = () => {
     if (roomState) {
       if (socket?.connected) socket.emit('room:leave', { roomId: roomState.id });
-      sessionRef.current = null;
+      setSession(null);
       setRoomState(null);
       setView('landing');
     }

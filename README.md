@@ -37,6 +37,22 @@ npm run dev
 - **Frontend**: http://localhost:5173
 - **Backend**: http://localhost:3001
 
+### Make It Available On Other PCs
+
+The repository includes `render.yaml` for a public deployment. Render runs the
+Node server and built React client together, so every computer can use the same
+HTTPS URL.
+
+1. Push this repository to GitHub.
+2. In Render, choose **New > Blueprint** and select the repository.
+3. Confirm the service from `render.yaml` and deploy it.
+4. Open the generated `https://...onrender.com` URL on any PC or phone and
+     share that URL with other listeners.
+
+The Render disk keeps uploaded audio files across service restarts. Rooms and
+their membership are still held in memory, so active rooms end when the server
+restarts. For a permanent custom address, add a custom domain in Render.
+
 ### Usage
 
 1. Open the app in your browser

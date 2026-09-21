@@ -17,7 +17,7 @@ export class RoomManager {
       hostUserId: uid,
       mode: 'host', // 'host' or 'collaborative'
       members: {
-        [hostSocketId]: { username: hostUsername, userId: uid, joinedAt: Date.now(), canControl: true, muted: false }
+        [hostSocketId]: { username: hostUsername, userId: uid, joinedAt: Date.now(), canControl: true }
       },
       memberPermissions: new Map(),
       queue: [],
@@ -76,8 +76,7 @@ export class RoomManager {
         username: data.username,
         joinedAt: data.joinedAt,
         isHost: data.userId === room.hostUserId,
-        canControl: data.userId === room.hostUserId ? true : !!data.canControl,
-        muted: !!data.muted
+        canControl: data.userId === room.hostUserId ? true : !!data.canControl
       })),
       queue: room.queue,
       playbackState: room.playbackState
@@ -92,11 +91,9 @@ export class RoomManager {
     // with a NEW socket id) and carry over its control permission.
     let priorControl = !!room.members[socketId]?.canControl || !!room.memberPermissions.get(uid);
     let joinedAt = room.members[socketId]?.joinedAt ?? Date.now();
-    let priorMuted = !!room.members[socketId]?.muted;
     for (const [sid, m] of Object.entries(room.members)) {
       if (m.userId === uid && sid !== socketId) {
         priorControl = priorControl || !!m.canControl;
-        priorMuted = priorMuted || !!m.muted;
         joinedAt = m.joinedAt;
         delete room.members[sid];
       }
@@ -106,8 +103,7 @@ export class RoomManager {
       username,
       userId: uid,
       joinedAt,
-      canControl: isHostUser ? true : priorControl,
-      muted: priorMuted
+      canControl: isHostUser ? true : priorControl
     };
     // Reclaim host: repoint the room's current host socket at the reconnected
     // host so playback control works again after a break/reconnect.
@@ -121,15 +117,6 @@ export class RoomManager {
     if (!room || !room.members[memberId]) return false;
     room.members[memberId].canControl = !!allowed;
     room.memberPermissions.set(room.members[memberId].userId, !!allowed);
-    return true;
-  }
-
-  // Update a member's personal-mute state (listener stepped away). Shared with
-  // the room so everyone can see who is listening vs muted.
-  setMemberMute(roomId, socketId, muted) {
-    const room = this.rooms.get(roomId);
-    if (!room || !room.members[socketId]) return false;
-    room.members[socketId].muted = !!muted;
     return true;
   }
 
