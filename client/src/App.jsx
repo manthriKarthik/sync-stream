@@ -47,7 +47,9 @@ function saveSession(session) {
 
 function App() {
   const restoredSessionRef = useRef(loadSession());
-  const [view, setView] = useState('landing'); // 'landing' | 'room'
+  // Start in 'restoring' (not 'landing') when a saved session exists so a page
+  // refresh doesn't briefly flash the home screen before auto-rejoin completes.
+  const [view, setView] = useState(restoredSessionRef.current ? 'restoring' : 'landing'); // 'landing' | 'restoring' | 'room'
   const [roomState, setRoomState] = useState(null);
   const [username, setUsername] = useState(restoredSessionRef.current?.username || '');
   const [error, setError] = useState('');
@@ -135,6 +137,16 @@ function App() {
 
   useEffect(() => () => clearTimeout(requestTimerRef.current), []);
 
+  // If auto-rejoin stalls (e.g. the server is unreachable), don't leave the user
+  // stuck on the reconnecting screen — fall back to the landing page.
+  useEffect(() => {
+    if (view !== 'restoring') return;
+    const timer = setTimeout(() => {
+      setView((current) => (current === 'restoring' ? 'landing' : current));
+    }, 10000);
+    return () => clearTimeout(timer);
+  }, [view]);
+
   const handleCreateRoom = (name, user) => {
     if (!beginRequest()) return;
     setUsername(user);
@@ -169,6 +181,14 @@ function App() {
           pending={pending}
           error={error}
         />
+      </div>
+    );
+  }
+
+  if (view === 'restoring') {
+    return (
+      <div className="app">
+        <p className="room-notice" role="status">Reconnecting to your room...</p>
       </div>
     );
   }
