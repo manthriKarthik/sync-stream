@@ -16,6 +16,10 @@ export class RoomManager {
       // and "is host" checks use this, not the volatile socket id.
       hostUserId: uid,
       mode: 'host', // 'host' or 'collaborative'
+      // 'sequential' = play in the order added; 'fair' = round-robin by user so
+      // every listener's tracks are interleaved evenly (a "user queue").
+      queueMode: 'sequential',
+      _seq: 0, // monotonic arrival counter for stable fair-queue ordering
       members: {
         [hostSocketId]: { username: hostUsername, userId: uid, joinedAt: Date.now(), canControl: true }
       },
@@ -60,6 +64,69 @@ export class RoomManager {
     return { ...room.playbackState, syncTime };
   }
 
+  // Add a track to a room's queue. In 'fair' mode the queue is re-interleaved
+  // round-robin by the adding user; in 'sequential' mode it's appended.
+  enqueue(roomId, track) {
+    const room = this.rooms.get(roomId);
+    if (!room) return null;
+    track.seq = ++room._seq;
+    room.queue.push(track);
+    if (room.queueMode === 'fair') this.applyFairOrder(room);
+    return room.queue;
+  }
+
+  setQueueMode(roomId, mode) {
+    const room = this.rooms.get(roomId);
+    if (!room || !['sequential', 'fair'].includes(mode)) return false;
+    room.queueMode = mode;
+    if (mode === 'fair') this.applyFairOrder(room);
+    return true;
+  }
+
+  // Re-order the upcoming tracks so each user's songs are spread out fairly:
+  // round 1 of every user, then round 2, etc. The currently-playing track and
+  // everything before it stay locked in place. Ordering is stable via each
+  // track's arrival `seq`, so the result is deterministic as users are added.
+  applyFairOrder(room) {
+    const queue = room.queue;
+    if (queue.length <= 1) return;
+    const ps = room.playbackState;
+    const activeIndex = ps?.trackIndex ?? 0;
+    const lockedCount = Math.min(activeIndex + 1, queue.length);
+    const activeId = queue[activeIndex]?.id;
+
+    // Compute each track's round (its 0-based position within its owner's list)
+    // across the WHOLE queue, plus each user's earliest arrival, using seq.
+    const bySeq = [...queue].sort((a, b) => (a.seq || 0) - (b.seq || 0));
+    const roundOf = new Map();
+    const firstSeqOf = new Map();
+    const counter = new Map();
+    for (const t of bySeq) {
+      const owner = t.addedBy || 'unknown';
+      if (!firstSeqOf.has(owner)) firstSeqOf.set(owner, t.seq || 0);
+      const r = counter.get(owner) || 0;
+      roundOf.set(t.id, r);
+      counter.set(owner, r + 1);
+    }
+
+    const locked = queue.slice(0, lockedCount);
+    const pending = queue.slice(lockedCount);
+    pending.sort((a, b) => {
+      const ra = roundOf.get(a.id) ?? 0;
+      const rb = roundOf.get(b.id) ?? 0;
+      if (ra !== rb) return ra - rb;
+      const fa = firstSeqOf.get(a.addedBy || 'unknown') ?? 0;
+      const fb = firstSeqOf.get(b.addedBy || 'unknown') ?? 0;
+      if (fa !== fb) return fa - fb;
+      return (a.seq || 0) - (b.seq || 0);
+    });
+    room.queue = [...locked, ...pending];
+    if (activeId && ps) {
+      const idx = room.queue.findIndex(t => t.id === activeId);
+      if (idx >= 0) ps.trackIndex = idx;
+    }
+  }
+
   getRoomState(roomId) {
     const room = this.rooms.get(roomId);
     if (!room) return null;
@@ -70,6 +137,7 @@ export class RoomManager {
       hostId: room.hostId,
       hostUserId: room.hostUserId,
       mode: room.mode,
+      queueMode: room.queueMode,
       members: Object.entries(room.members).map(([id, data]) => ({
         id,
         userId: data.userId,

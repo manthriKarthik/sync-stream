@@ -80,3 +80,51 @@ test('granted controls survive a full disconnect and revoked controls stay revok
   manager.addMember(room.id, 'again', 'Listener', 'listener-user');
   assert.equal(room.members.again.canControl, false);
 });
+
+test('fair queue interleaves tracks round-robin by user as listeners are added', () => {
+  const manager = new RoomManager();
+  const room = manager.createRoom('Fair', 'host', 'User1', 'u1');
+  manager.setQueueMode(room.id, 'fair');
+
+  // User1 adds five songs, then User2 adds one — it slots after User1's first.
+  for (const name of ['A1', 'A2', 'A3', 'A4', 'A5']) {
+    manager.enqueue(room.id, { id: name, name, addedBy: 'User1' });
+  }
+  manager.enqueue(room.id, { id: 'B1', name: 'B1', addedBy: 'User2' });
+  assert.deepEqual(room.queue.map(t => t.id), ['A1', 'B1', 'A2', 'A3', 'A4', 'A5']);
+
+  // User2 adds a second song — pairs up in the second round.
+  manager.enqueue(room.id, { id: 'B2', name: 'B2', addedBy: 'User2' });
+  assert.deepEqual(room.queue.map(t => t.id), ['A1', 'B1', 'A2', 'B2', 'A3', 'A4', 'A5']);
+
+  // A third user's first song joins the first round after the existing users.
+  manager.enqueue(room.id, { id: 'C1', name: 'C1', addedBy: 'User3' });
+  assert.deepEqual(room.queue.map(t => t.id), ['A1', 'B1', 'C1', 'A2', 'B2', 'A3', 'A4', 'A5']);
+});
+
+test('fair queue keeps the currently-playing track and played tracks locked', () => {
+  const manager = new RoomManager();
+  const room = manager.createRoom('Fair', 'host', 'User1', 'u1');
+  manager.setQueueMode(room.id, 'fair');
+  for (const name of ['A1', 'A2', 'A3']) {
+    manager.enqueue(room.id, { id: name, name, addedBy: 'User1' });
+  }
+  // A1 is now playing; a new user's track must not jump ahead of it.
+  room.playbackState.playing = true;
+  room.playbackState.trackIndex = 0;
+  manager.enqueue(room.id, { id: 'B1', name: 'B1', addedBy: 'User2' });
+  assert.equal(room.queue[0].id, 'A1');
+  assert.deepEqual(room.queue.map(t => t.id), ['A1', 'B1', 'A2', 'A3']);
+});
+
+test('switching to fair mode re-orders an existing sequential queue', () => {
+  const manager = new RoomManager();
+  const room = manager.createRoom('Fair', 'host', 'User1', 'u1');
+  manager.enqueue(room.id, { id: 'A1', name: 'A1', addedBy: 'User1' });
+  manager.enqueue(room.id, { id: 'A2', name: 'A2', addedBy: 'User1' });
+  manager.enqueue(room.id, { id: 'B1', name: 'B1', addedBy: 'User2' });
+  // Sequential leaves the add order untouched.
+  assert.deepEqual(room.queue.map(t => t.id), ['A1', 'A2', 'B1']);
+  manager.setQueueMode(room.id, 'fair');
+  assert.deepEqual(room.queue.map(t => t.id), ['A1', 'B1', 'A2']);
+});

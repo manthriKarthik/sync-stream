@@ -126,7 +126,7 @@ app.post('/api/upload/:roomId', (req, res, next) => {
     addedBy: room.members[req.headers['x-socket-id']]?.username || 'Listener'
   };
 
-  room.queue.push(track);
+  roomManager.enqueue(roomId, track);
   io.to(roomId).emit('queue:updated', room.queue);
   io.to(roomId).emit('queue:song-added', {
     name: track.name,
@@ -945,7 +945,7 @@ io.on('connection', (socket) => {
           && !(track.platform === 'saavn' && track.url.startsWith('/api/saavn/stream?')))))
       || (track.uri != null && typeof track.uri !== 'string')) return;
     // Add streaming platform track to queue
-    room.queue.push({
+    roomManager.enqueue(roomId, {
       id: uuidv4(),
       name: track.name,
       artist: track.artist,
@@ -963,6 +963,16 @@ io.on('connection', (socket) => {
       name: track.name,
       addedBy: room.members[socket.id].username
     });
+  });
+
+  // Toggle the queue ordering mode ('sequential' | 'fair'). Anyone who can
+  // control playback may change it (host, or everyone in collaborative mode).
+  socket.on('queue:set-mode', ({ roomId, mode }) => {
+    const room = roomManager.getRoom(roomId);
+    if (!room || !memberCanControl(room, socket.id)) return;
+    if (!roomManager.setQueueMode(roomId, mode)) return;
+    io.to(roomId).emit('queue:mode-changed', room.queueMode);
+    io.to(roomId).emit('queue:updated', room.queue);
   });
 
   socket.on('queue:reorder', ({ roomId, queue }) => {

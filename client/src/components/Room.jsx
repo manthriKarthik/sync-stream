@@ -18,6 +18,7 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
   const queueRef = useRef(queue);
   const [members, setMembers] = useState(roomState?.members || []);
   const [mode, setMode] = useState(roomState?.mode || 'host');
+  const [queueMode, setQueueMode] = useState(roomState?.queueMode || 'sequential');
   const [currentTrackIndex, setCurrentTrackIndex] = useState(
     roomState?.playbackState?.trackIndex || 0
   );
@@ -203,6 +204,7 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
       setMembers(prev => prev.filter(m => m.id !== id));
     };
     const handleModeChanged = (newMode) => setMode(newMode);
+    const handleQueueModeChanged = (newQueueMode) => setQueueMode(newQueueMode);
     const handleControlChanged = ({ memberId, allowed }) => {
       setMembers(prev => prev.map(m => (m.id === memberId ? { ...m, canControl: allowed } : m)));
     };
@@ -216,6 +218,7 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
       setCurrentTrackIndex(state.playbackState?.trackIndex ?? 0);
       setMembers(state.members || []);
       setMode(state.mode || 'host');
+      setQueueMode(state.queueMode || 'sequential');
       if (Array.isArray(state.queue)) {
         queueRef.current = state.queue;
         setQueue(state.queue);
@@ -257,6 +260,7 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
     socket.on('room:member-joined', handleMemberJoined);
     socket.on('room:member-left', handleMemberLeft);
     socket.on('room:mode-changed', handleModeChanged);
+    socket.on('queue:mode-changed', handleQueueModeChanged);
     socket.on('room:control-changed', handleControlChanged);
     socket.on('room:host-changed', handleHostChanged);
     socket.on('room:state', handleRoomState);
@@ -269,6 +273,7 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
       socket.off('room:member-joined', handleMemberJoined);
       socket.off('room:member-left', handleMemberLeft);
       socket.off('room:mode-changed', handleModeChanged);
+      socket.off('queue:mode-changed', handleQueueModeChanged);
       socket.off('room:control-changed', handleControlChanged);
       socket.off('room:host-changed', handleHostChanged);
       socket.off('room:state', handleRoomState);
@@ -670,6 +675,11 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
     socket.emit('room:set-mode', { roomId: roomState.id, mode: newMode });
   };
 
+  const handleQueueModeChange = (newQueueMode) => {
+    if (!canControl || !connected || !socket?.connected) return;
+    socket.emit('queue:set-mode', { roomId: roomState.id, mode: newQueueMode });
+  };
+
   const handleRemoveTrack = (trackId) => {
     if (!canControl) return;
     socket.emit('queue:remove', { roomId: roomState.id, trackId });
@@ -1014,7 +1024,29 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
 
         {queue.length > 0 ? (
           <>
-            <h3 style={{ marginBottom: 16, fontSize: 16 }}>Queue</h3>
+            <div className="queue-header">
+              <h3 style={{ fontSize: 16 }}>Queue</h3>
+              <div className="queue-mode-toggle" role="group" aria-label="Queue order">
+                <button
+                  className={queueMode === 'sequential' ? 'active' : ''}
+                  aria-pressed={queueMode === 'sequential'}
+                  disabled={!canControl}
+                  onClick={() => handleQueueModeChange('sequential')}
+                  title="Play tracks in the order they were added"
+                >
+                  Sequential
+                </button>
+                <button
+                  className={queueMode === 'fair' ? 'active' : ''}
+                  aria-pressed={queueMode === 'fair'}
+                  disabled={!canControl}
+                  onClick={() => handleQueueModeChange('fair')}
+                  title="Interleave everyone's tracks fairly, round-robin by user"
+                >
+                  Fair queue
+                </button>
+              </div>
+            </div>
             <Queue
               queue={queue}
               currentIndex={currentTrackIndex}
