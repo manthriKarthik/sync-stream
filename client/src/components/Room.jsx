@@ -991,11 +991,13 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
             </button>
           </div>
         )}
+        {/* Audio-only: the YouTube player stays mounted/functional but hidden
+            off-screen so only its audio plays. Controls come from the player bar. */}
         <div
           id="yt-player-container"
           ref={youtube.containerRef}
-          hidden={!isPlatformTrack}
-          style={{ position: 'relative', width: '100%', maxWidth: 640, minHeight: 200, aspectRatio: '16 / 9', marginBottom: 24 }}
+          aria-hidden="true"
+          style={{ position: 'fixed', left: -9999, top: -9999, width: 320, height: 180, opacity: 0, pointerEvents: 'none' }}
         />
         <PlatformConnect
           connected={connected}

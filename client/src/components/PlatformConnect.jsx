@@ -2,6 +2,7 @@ import { useState, useCallback, useRef } from 'react';
 import { Music2, X } from 'lucide-react';
 import Upload from './Upload';
 import PlatformLogo from './PlatformLogo';
+import SearchBar from './SearchBar';
 
 const TABS = [
   { id: 'audius', label: 'Audius' },
@@ -53,10 +54,9 @@ function PlatformConnect({ youtube, audius, saavn, soundcloud, roomId, userId, o
     }
   }, [activeTab, youtube, audius, saavn, soundcloud]);
 
-  const handleSearch = useCallback((e) => {
-    e.preventDefault();
-    performSearch(searchQuery);
-  }, [performSearch, searchQuery]);
+  const handleSearch = useCallback((query) => {
+    performSearch(query);
+  }, [performSearch]);
 
   // Update the query; clearing the box also clears the results list.
   const handleSearchChange = (value) => {
@@ -159,18 +159,14 @@ function PlatformConnect({ youtube, audius, saavn, soundcloud, roomId, userId, o
           <p style={{ fontSize: 12, color: 'var(--success)', marginBottom: 12 }}>
             ✓ Free • full songs • no login • perfectly synced
           </p>
-          <form onSubmit={handleSearch} style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-            <input
-              className="input"
-              type="text"
-              placeholder="Search Audius for music..."
-              value={searchQuery}
-              onChange={(e) => handleSearchChange(e.target.value)}
-            />
-            <button className="btn btn-primary" type="submit" disabled={searching}>
-              {searching ? '...' : '🔍'}
-            </button>
-          </form>
+          <SearchBar
+            value={searchQuery}
+            onChange={handleSearchChange}
+            onSubmit={handleSearch}
+            placeholder="Search Audius for music..."
+            searching={searching}
+            provider="audius"
+          />
         </div>
       )}
 
@@ -180,18 +176,14 @@ function PlatformConnect({ youtube, audius, saavn, soundcloud, roomId, userId, o
           <p style={{ fontSize: 12, color: 'var(--success)', marginBottom: 12 }}>
             ✓ Free • full songs • no login • plays on ALL devices + background
           </p>
-          <form onSubmit={handleSearch} style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-            <input
-              className="input"
-              type="text"
-              placeholder="Search songs (Hindi, English, Telugu, Tamil...)"
-              value={searchQuery}
-              onChange={(e) => handleSearchChange(e.target.value)}
-            />
-            <button className="btn btn-primary" type="submit" disabled={searching}>
-              {searching ? '...' : '🔍'}
-            </button>
-          </form>
+          <SearchBar
+            value={searchQuery}
+            onChange={handleSearchChange}
+            onSubmit={handleSearch}
+            placeholder="Search songs (Hindi, English, Telugu, Tamil...)"
+            searching={searching}
+            provider="saavn"
+          />
         </div>
       )}
 
@@ -201,18 +193,14 @@ function PlatformConnect({ youtube, audius, saavn, soundcloud, roomId, userId, o
           <p style={{ fontSize: 12, color: 'var(--success)', marginBottom: 12 }}>
             ✓ Free • full songs • no login • great for English • plays on ALL devices
           </p>
-          <form onSubmit={handleSearch} style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-            <input
-              className="input"
-              type="text"
-              placeholder="Search SoundCloud (English, remixes, covers...)"
-              value={searchQuery}
-              onChange={(e) => handleSearchChange(e.target.value)}
-            />
-            <button className="btn btn-primary" type="submit" disabled={searching}>
-              {searching ? '...' : '🔍'}
-            </button>
-          </form>
+          <SearchBar
+            value={searchQuery}
+            onChange={handleSearchChange}
+            onSubmit={handleSearch}
+            placeholder="Search SoundCloud (English, remixes, covers...)"
+            searching={searching}
+            provider="soundcloud"
+          />
         </div>
       )}
 
@@ -241,18 +229,14 @@ function PlatformConnect({ youtube, audius, saavn, soundcloud, roomId, userId, o
           <div className="divider">or search</div>
 
           {/* Search */}
-          <form onSubmit={handleSearch} style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-            <input
-              className="input"
-              type="text"
-              placeholder="Search YouTube for music..."
-              value={searchQuery}
-              onChange={(e) => handleSearchChange(e.target.value)}
-            />
-            <button className="btn btn-primary" type="submit" disabled={searching}>
-              {searching ? '...' : '🔍'}
-            </button>
-          </form>
+          <SearchBar
+            value={searchQuery}
+            onChange={handleSearchChange}
+            onSubmit={handleSearch}
+            placeholder="Search YouTube for music..."
+            searching={searching}
+            provider="youtube"
+          />
         </div>
       )}
 
@@ -270,7 +254,7 @@ function PlatformConnect({ youtube, audius, saavn, soundcloud, roomId, userId, o
       {searchError && <p className="form-error" role="alert">{searchError}</p>}
       {searched && !searching && searchResults.length === 0 && <p className="search-empty" role="status">No tracks found for "{searchQuery}".</p>}
       {activeTab !== 'upload' && searchResults.length > 0 && (
-        <div style={{ maxHeight: 300, overflowY: 'auto', marginTop: 12 }}>
+        <div className="search-results">
           {searchResults.map((track) => {
             const isAdded = addedIds.has(track.id);
             return (
@@ -278,76 +262,37 @@ function PlatformConnect({ youtube, audius, saavn, soundcloud, roomId, userId, o
               key={track.id}
               className="search-result-row"
               onClick={() => handleSelectTrack(track)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 12,
-                padding: '8px 10px',
-                borderRadius: 8,
-                cursor: 'pointer',
-                transition: 'background 0.2s'
-              }}
-              onMouseOver={(e) => e.currentTarget.style.background = 'var(--bg-tertiary)'}
-              onMouseOut={(e) => e.currentTarget.style.background = 'transparent'}
             >
-              {track.albumArt && (
-                <img
-                  src={track.albumArt}
-                  alt=""
-                  style={{ width: 48, height: 36, borderRadius: 4, objectFit: 'cover' }}
-                />
-              )}
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {track.name}
-                </div>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+              <div className="search-result-art">
+                {track.albumArt ? (
+                  <img src={track.albumArt} alt="" loading="lazy" />
+                ) : (
+                  <Music2 size={18} />
+                )}
+              </div>
+              <div className="search-result-meta">
+                <div className="search-result-title">{track.name}</div>
+                <div className="search-result-sub">
                   {track.artist}{track.durationText ? ` • ${track.durationText}` : ''}
                 </div>
               </div>
               {isAdded ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 4,
-                      padding: '4px 10px',
-                      fontSize: 11,
-                      fontWeight: 600,
-                      color: '#000',
-                      background: '#fff',
-                      borderRadius: 6,
-                      whiteSpace: 'nowrap'
-                    }}
-                  >
-                    ✓ Added
-                  </span>
+                <div className="search-result-actions">
+                  <span className="search-result-added">✓ Added</span>
                   <button
+                    className="search-result-again"
                     onClick={(e) => { e.stopPropagation(); handleSelectTrack(track); }}
                     title="Add this song to the queue again"
                     disabled={!connected}
-                    style={{
-                      padding: '4px 8px',
-                      fontSize: 11,
-                      fontWeight: 500,
-                      color: 'var(--text-secondary)',
-                      background: 'rgba(255,255,255,0.08)',
-                      border: '1px solid var(--border)',
-                      borderRadius: 6,
-                      cursor: 'pointer',
-                      whiteSpace: 'nowrap'
-                    }}
                   >
                     Add again
                   </button>
                 </div>
               ) : (
                 <button
-                  className="btn btn-primary"
+                  className="btn btn-primary search-result-add"
                   onClick={(e) => { e.stopPropagation(); handleSelectTrack(track); }}
                   disabled={!connected}
-                  style={{ padding: '4px 10px', fontSize: 11 }}
                 >
                   {queueEmpty && canControl ? '▶ Play' : '+ Add'}
                 </button>

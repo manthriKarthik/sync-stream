@@ -11,3 +11,12 @@ export async function searchProvider(provider, query) {
     clearTimeout(timeout);
   }
 }
+
+export async function fetchSuggestions(query, signal, provider) {
+  if (!query || !query.trim()) return [];
+  const providerParam = provider ? `&provider=${encodeURIComponent(provider)}` : '';
+  const response = await fetch(`/api/suggest?q=${encodeURIComponent(query)}${providerParam}`, { signal });
+  if (!response.ok) return [];
+  const data = await response.json();
+  return Array.isArray(data.suggestions) ? data.suggestions : [];
+}

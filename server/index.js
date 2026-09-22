@@ -265,6 +265,92 @@ app.get('/api/youtube/search', async (req, res) => {
   }
 });
 
+// Google's public YouTube autocomplete.
+async function suggestYouTube(query, signal) {
+  const url = `https://suggestqueries.google.com/complete/search?client=firefox&ds=yt&q=${encodeURIComponent(query)}`;
+  const response = await fetch(url, { signal });
+  if (!response.ok) throw new Error(`Suggest failed: ${response.status}`);
+  const data = await response.json();
+  // Response shape: ["query", ["suggestion1", "suggestion2", ...]]
+  return Array.isArray(data?.[1]) ? data[1] : [];
+}
+
+// JioSaavn's own autocomplete (songs / albums / artists).
+async function suggestSaavn(query, signal) {
+  const url = `${SAAVN_ENDPOINT}?__call=autocomplete.get&query=${encodeURIComponent(query)}` +
+    `&_format=json&_marker=0&ctx=web6dot0`;
+  const response = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal });
+  if (!response.ok) throw new Error(`Saavn suggest failed: ${response.status}`);
+  const data = await response.json();
+  const groups = [data?.songs?.data, data?.albums?.data, data?.artists?.data];
+  const out = [];
+  for (const group of groups) {
+    if (!Array.isArray(group)) continue;
+    for (const item of group) {
+      const label = decodeEntities(item.title || item.name || '').trim();
+      if (label) out.push(label);
+    }
+  }
+  return out;
+}
+
+// SoundCloud's own search-query autocomplete.
+async function suggestSoundCloud(query, signal) {
+  const clientId = await getSoundCloudClientId();
+  const url = `https://api-v2.soundcloud.com/search/queries?q=${encodeURIComponent(query)}` +
+    `&client_id=${clientId}&limit=10`;
+  const response = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal });
+  if (!response.ok) throw new Error(`SoundCloud suggest failed: ${response.status}`);
+  const data = await response.json();
+  return (data?.collection || []).map(c => (c.output || c.query || '').trim()).filter(Boolean);
+}
+
+// Audius has no autocomplete — derive suggestions from track search titles.
+async function suggestAudius(query, signal) {
+  const host = await getAudiusHost();
+  const url = `${host}/v1/tracks/search?query=${encodeURIComponent(query)}&app_name=${AUDIUS_APP}`;
+  const response = await fetch(url, { signal });
+  if (!response.ok) throw new Error(`Audius suggest failed: ${response.status}`);
+  const data = await response.json();
+  return (data?.data || []).map(t => (t.title || '').trim()).filter(Boolean);
+}
+
+const SUGGEST_PROVIDERS = {
+  youtube: suggestYouTube,
+  saavn: suggestSaavn,
+  soundcloud: suggestSoundCloud,
+  audius: suggestAudius
+};
+
+// Autocomplete suggestions — routed to the active platform's own suggest API.
+app.get('/api/suggest', async (req, res) => {
+  const query = req.query.q;
+  if (!query || !query.trim()) return res.json({ suggestions: [] });
+
+  const provider = SUGGEST_PROVIDERS[req.query.provider] ? req.query.provider : 'youtube';
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+  try {
+    const raw = await SUGGEST_PROVIDERS[provider](query, controller.signal);
+    // De-duplicate (case-insensitive) and cap the list.
+    const seen = new Set();
+    const suggestions = [];
+    for (const s of raw) {
+      const key = s.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      suggestions.push(s);
+      if (suggestions.length >= 10) break;
+    }
+    res.json({ suggestions });
+  } catch (err) {
+    console.error(`Suggest error (${provider}):`, err.message);
+    res.json({ suggestions: [] });
+  } finally {
+    clearTimeout(timeout);
+  }
+});
+
 // --- Audius (free, full-song streaming, no login) ---
 let audiusHostCache = null;
 let audiusHostCacheTime = 0;
