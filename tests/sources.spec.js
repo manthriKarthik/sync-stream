@@ -100,11 +100,11 @@ test('YouTube offers a visible gesture fallback and reloads failed videos on ret
   const fallback = page.getByRole('button', { name: 'Play YouTube audio', exact: true });
   await expect(fallback).toBeVisible();
   const iframe = page.locator('#yt-player-container iframe');
-  await expect(iframe).toBeVisible();
+  await expect(iframe).toHaveCount(1);
   await expect(iframe).toHaveAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
-  const bounds = await iframe.boundingBox();
-  expect(bounds.width).toBeGreaterThanOrEqual(200);
-  expect(bounds.height).toBeGreaterThanOrEqual(200);
+  // Audio-only: the player is mounted but hidden off-screen (no visible video).
+  const box = await page.locator('#yt-player-container').boundingBox();
+  expect(box.x + box.width).toBeLessThanOrEqual(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: testInfo.outputPath('youtube-recovery.png'), fullPage: true, animations: 'disabled' });
   await page.evaluate(() => { window.__youtubeMock.blocked = false; });
