@@ -45,6 +45,12 @@ export function useAudioSync(socket, onEnded) {
   // during this window would hard-seek the song forward past its first few
   // seconds, so drift correction is suppressed until the new track settles.
   const recentLoadRef = useRef(0);
+  // True while the shared element is SUPPOSED to be playing. When a song
+  // auto-advances in the background, mobile browsers throttle the new track's
+  // load so the initial play() stalls and the next song stays silent until the
+  // tab is foregrounded. The 'canplay' handler uses this flag to retry play()
+  // the moment the throttled load finishes buffering.
+  const wantPlayRef = useRef(false);
   // Latest clock offset, mirrored into a ref so gesture handlers (resume) can
   // compute the synced position without stale closures.
   const clockOffsetRef = useRef(0);
@@ -127,8 +133,19 @@ export function useAudioSync(socket, onEnded) {
     const burstTimers = Array.from({ length: 5 }, (_, index) => setTimeout(syncClock, index * 200));
     syncIntervalRef.current = setInterval(syncClock, 3000);
     const handleVisibility = () => {
-      audioRef.current.playbackRate = 1;
-      if (!document.hidden) syncClock();
+      const a = audioRef.current;
+      a.playbackRate = 1;
+      if (document.hidden) return;
+      syncClock();
+      // Back in the foreground: if a background auto-advance left the shared
+      // element loaded-but-stalled, kick it off now instead of waiting for the
+      // next server sync.
+      if (wantPlayRef.current && activeIsSharedRef.current && a.src && a.paused) {
+        const state = playbackStateRef.current;
+        const ended = state && endedPlaybackRef.current?.updatedAt === state.updatedAt
+          && endedPlaybackRef.current?.trackIndex === state.trackIndex;
+        if (state?.playing && !ended) a.play().catch(() => {});
+      }
     };
     document.addEventListener('visibilitychange', handleVisibility);
 
@@ -217,6 +234,7 @@ export function useAudioSync(socket, onEnded) {
     // If the active track plays through a platform SDK (YouTube),
     // keep the shared element silent so two songs never overlap.
     if (!activeIsSharedRef.current) {
+      wantPlayRef.current = false;
       if (!audio.paused) audio.pause();
       return;
     }
@@ -228,7 +246,11 @@ export function useAudioSync(socket, onEnded) {
     const preservePlayback = unchanged && !audio.paused;
     playbackStateRef.current = state;
     if (state.playing && endedPlaybackRef.current?.updatedAt === state.updatedAt
-      && endedPlaybackRef.current?.trackIndex === state.trackIndex) return;
+      && endedPlaybackRef.current?.trackIndex === state.trackIndex) {
+      wantPlayRef.current = false;
+      return;
+    }
+    wantPlayRef.current = !!state.playing;
     if (preservePlayback) return;
 
     if (state.playing) {
@@ -289,9 +311,28 @@ export function useAudioSync(socket, onEnded) {
     };
 
     const handleEnded = () => {
+      wantPlayRef.current = false;
       setIsPlaying(false);
       endedPlaybackRef.current = playbackStateRef.current;
       onEndedRef.current?.({ duration: audio.duration });
+    };
+
+    // A freshly-loaded track (e.g. an auto-advanced song) that was told to play
+    // while backgrounded may have its load throttled, so the initial play()
+    // stalls and never produces sound. When the throttled load finally buffers,
+    // 'canplay' fires (even in the background) — retry play() here so the next
+    // song starts on its own instead of waiting for the tab to be reopened.
+    const handleCanPlay = () => {
+      if (!wantPlayRef.current || !activeIsSharedRef.current) return;
+      const state = playbackStateRef.current;
+      if (!state?.playing || !audio.src || !audio.paused) return;
+      if (endedPlaybackRef.current?.updatedAt === state.updatedAt
+        && endedPlaybackRef.current?.trackIndex === state.trackIndex) return;
+      audio.play().then(() => {
+        setNeedsGesture(false);
+      }).catch((err) => {
+        setNeedsGesture(err.name === 'NotAllowedError');
+      });
     };
 
     // Once the element is actually producing sound, clear any tap-to-play flag.
@@ -303,6 +344,8 @@ export function useAudioSync(socket, onEnded) {
 
     audio.addEventListener('loadedmetadata', handleLoadedMetadata);
     audio.addEventListener('ended', handleEnded);
+    audio.addEventListener('canplay', handleCanPlay);
+    audio.addEventListener('canplaythrough', handleCanPlay);
     audio.addEventListener('playing', handlePlaying);
     audio.addEventListener('pause', handlePaused);
     animFrameRef.current = requestAnimationFrame(updateTime);
@@ -310,6 +353,8 @@ export function useAudioSync(socket, onEnded) {
     return () => {
       audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
       audio.removeEventListener('ended', handleEnded);
+      audio.removeEventListener('canplay', handleCanPlay);
+      audio.removeEventListener('canplaythrough', handleCanPlay);
       audio.removeEventListener('playing', handlePlaying);
       audio.removeEventListener('pause', handlePaused);
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
@@ -365,6 +410,7 @@ export function useAudioSync(socket, onEnded) {
   }, []);
 
   const play = useCallback(() => {
+    wantPlayRef.current = true;
     audioRef.current.play().then(() => {
       setIsPlaying(true);
       setNeedsGesture(false);
@@ -376,6 +422,7 @@ export function useAudioSync(socket, onEnded) {
   }, []);
 
   const pause = useCallback(() => {
+    wantPlayRef.current = false;
     audioRef.current.pause();
     setIsPlaying(false);
     setNeedsGesture(false);
@@ -390,6 +437,7 @@ export function useAudioSync(socket, onEnded) {
     const state = playbackStateRef.current;
     if (state && endedPlaybackRef.current?.updatedAt === state.updatedAt
       && endedPlaybackRef.current?.trackIndex === state.trackIndex) return;
+    wantPlayRef.current = true;
     if (state && state.playing && a.src) {
       const syncedNow = Date.now() + clockOffsetRef.current;
       const elapsed = state.syncTime ? (syncedNow - state.syncTime) / 1000 : 0;
@@ -412,6 +460,7 @@ export function useAudioSync(socket, onEnded) {
   // progress bar for a source that's no longer in the queue.
   const stop = useCallback(() => {
     const a = audioRef.current;
+    wantPlayRef.current = false;
     if (hlsRef.current) {
       try { hlsRef.current.destroy(); } catch (_) { /* ignore */ }
       hlsRef.current = null;
