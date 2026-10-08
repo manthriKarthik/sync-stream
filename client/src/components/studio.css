@@ -87,7 +87,7 @@ button:disabled { cursor: not-allowed; }
 .mode-toggle:has(button:nth-child(2).active)::before { transform: translateX(100%); }
 .mode-toggle button { padding: 9px 12px; font-size: 12px; border-radius: 4px; transition: color .2s; }
 .mode-toggle button.active { color: #191a1e; background: transparent; box-shadow: none; }
-.music-browser { border-top: 1px solid var(--border-strong); border-bottom: 1px solid var(--border-strong); padding: 24px 0; margin-bottom: 24px; animation: room-arrive .65s .06s var(--ease-settle) both; }
+.music-browser { position: relative; z-index: 30; border-top: 1px solid var(--border-strong); border-bottom: 1px solid var(--border-strong); padding: 24px 0; margin-bottom: 24px; animation: room-arrive .65s .06s var(--ease-settle) both; }
 .library-title { display: flex; align-items: center; gap: 9px; font-size: 17px; font-weight: 500; }
 .library-title svg { color: var(--accent-2); }
 .music-browser > div > p:first-child { display: none; }
