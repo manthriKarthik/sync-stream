@@ -1055,7 +1055,7 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
               canControl={canControl}
             />
           </>
-        ) : <div className="queue-empty"><ListMusic size={32} /><h2>The queue is all yours.</h2><span>No tracks yet</span></div>}
+        ) : <div classNaDownloadsme="queue-empty"><ListMusic size={32} /><h2>The queue is all yours.</h2><span>No tracks yet</span></div>}
       </div>
 
       {/* Sliding Members & Chat Panel */}

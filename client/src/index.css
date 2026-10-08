@@ -2098,6 +2098,7 @@ input {
 .search-bar {
   position: relative;
   margin-bottom: 12px;
+  z-index: 100;
 }
 .search-bar-form {
   display: flex;
@@ -2199,11 +2200,11 @@ input {
   top: 100%;
   left: 0;
   right: 62px;
-  z-index: 40;
+  z-index: 101;
   margin: -1px 0 0;
   padding: 6px;
   list-style: none;
-  background: rgba(16, 16, 22, 0.92);
+  background: #121218;
   backdrop-filter: blur(20px) saturate(160%);
   border: 1px solid var(--border-strong);
   border-top: none;
