@@ -130,18 +130,6 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
   // Handle adding a streaming platform track to the queue
   const handlePlatformTrackSelected = (track) => {
     if (!connected || !socket?.connected) return;
-    // Route YouTube through our server audio proxy and play it via the shared
-    // <audio> element instead of the YouTube iframe. The iframe is suspended by
-    // mobile browsers in the background; a native <audio> stream keeps playing.
-    // (This relies on server-side audio extraction, which violates YouTube's ToS.)
-    let queuedTrack = track;
-    if (track.platform === 'youtube' && track.uri) {
-      queuedTrack = {
-        ...track,
-        platform: 'ytmusic',
-        url: `/api/youtube/audio/${track.uri}`
-      };
-    }
     // Was the queue empty before this add? If so, this is the "first song" —
     // start playing it immediately (inside the tap gesture, so mobile browsers
     // allow sound). Every later song just gets added to the queue.
@@ -150,15 +138,15 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
     socket.emit('queue:add-platform-track', {
       roomId: roomState.id,
       track: {
-        id: queuedTrack.id,
-        name: queuedTrack.name,
-        artist: queuedTrack.artist,
-        album: queuedTrack.album,
-        albumArt: queuedTrack.albumArt,
-        uri: queuedTrack.uri,
-        url: queuedTrack.url || null, // Audius / YouTube-proxy provide a direct stream URL
-        duration: queuedTrack.duration,
-        platform: queuedTrack.platform,
+        id: track.id,
+        name: track.name,
+        artist: track.artist,
+        album: track.album,
+        albumArt: track.albumArt,
+        uri: track.uri,
+        url: track.url || null, // Audius provides a direct stream URL
+        duration: track.duration,
+        platform: track.platform,
         addedBy: username
       }
     });
@@ -166,7 +154,7 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
     if (isFirstSong && canControl) {
       // Play this first track right away within the user gesture and tell the
       // server/other devices to start it in sync at index 0.
-      startTrackInGesture(queuedTrack);
+      startTrackInGesture(track);
       socket.emit('playback:play', {
         roomId: roomState.id,
         trackIndex: 0,

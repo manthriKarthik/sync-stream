@@ -207,8 +207,11 @@ function PlatformConnect({ youtube, audius, saavn, soundcloud, roomId, userId, o
       {/* YouTube - always available (audio only) */}
       {activeTab === 'youtube' && (
         <div>
-          <p style={{ fontSize: 12, color: 'var(--success)', marginBottom: 12 }}>
+          <p style={{ fontSize: 12, color: 'var(--success)', marginBottom: 6 }}>
             ✓ Audio only • no login required — works for everyone
+          </p>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
+            ⚠ Plays only while the app is open. For background play on mobile, use Audius, Saavn or an upload.
           </p>
 
           {/* Paste URL */}
