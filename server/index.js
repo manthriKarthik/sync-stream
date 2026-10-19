@@ -11,6 +11,7 @@ import { Readable } from 'stream';
 import { fileURLToPath } from 'url';
 import 'dotenv/config';
 import { YouTube } from 'youtube-sr';
+import ytdl from '@distube/ytdl-core';
 import { RoomManager } from './rooms.js';
 import { ClockSyncHandler } from './sync.js';
 
@@ -265,10 +266,65 @@ app.get('/api/youtube/search', async (req, res) => {
   }
 });
 
+// Pick the best audio-only format for a video, cached so repeated range
+// requests (iOS makes many) don't re-run the slow getInfo each time. Extracted
+// googlevideo URLs are IP-locked and expire after a few hours.
+const ytAudioCache = new Map(); // videoId -> { url, mimeType, expires }
+async function getYouTubeAudioFormat(videoId) {
+  const cached = ytAudioCache.get(videoId);
+  if (cached && cached.expires > Date.now()) return cached;
+  const info = await ytdl.getInfo(`https://www.youtube.com/watch?v=${videoId}`);
+  const format = ytdl.chooseFormat(info.formats, { quality: 'highestaudio', filter: 'audioonly' });
+  if (!format?.url) throw new Error('No audio format available');
+  const entry = {
+    url: format.url,
+    mimeType: (format.mimeType || '').split(';')[0] || 'audio/webm',
+    expires: Date.now() + 30 * 60 * 1000
+  };
+  ytAudioCache.set(videoId, entry);
+  return entry;
+}
+
+// Stream a YouTube video's audio track so it can play through a native <audio>
+// element (which, unlike the YouTube iframe, keeps playing in the background on
+// mobile). Forwards HTTP Range so iOS Safari can buffer/seek.
+// NOTE: extracting YouTube audio violates YouTube's Terms of Service and the
+// extractor needs periodic updates when YouTube changes its internals.
+app.get('/api/youtube/audio/:videoId', async (req, res) => {
+  const { videoId } = req.params;
+  if (!ytdl.validateID(videoId)) return res.status(400).json({ error: 'Invalid video id' });
+  try {
+    const format = await getYouTubeAudioFormat(videoId);
+    const upstreamHeaders = { 'user-agent': 'Mozilla/5.0' };
+    if (req.headers.range) upstreamHeaders.range = req.headers.range;
+    let upstream = await fetch(format.url, { headers: upstreamHeaders });
+    // A cached URL may have expired — refetch info once and retry.
+    if (upstream.status === 403 || upstream.status === 410) {
+      ytAudioCache.delete(videoId);
+      const fresh = await getYouTubeAudioFormat(videoId);
+      upstream = await fetch(fresh.url, { headers: upstreamHeaders });
+    }
+    if (!upstream.ok && upstream.status !== 206) {
+      return res.status(502).json({ error: 'Could not load YouTube audio' });
+    }
+    res.status(upstream.status);
+    for (const header of ['content-length', 'content-range', 'accept-ranges', 'cache-control']) {
+      const value = upstream.headers.get(header);
+      if (value) res.setHeader(header, value);
+    }
+    if (!upstream.headers.get('accept-ranges')) res.setHeader('Accept-Ranges', 'bytes');
+    res.setHeader('Content-Type', format.mimeType);
+    req.on('close', () => { try { upstream.body?.cancel?.(); } catch (_) { /* ignore */ } });
+    Readable.fromWeb(upstream.body).pipe(res);
+  } catch (err) {
+    console.error('YouTube audio error:', err.message);
+    if (!res.headersSent) res.status(502).json({ error: 'Could not load YouTube audio' });
+  }
+});
+
 // Google's public YouTube autocomplete.
 async function suggestYouTube(query, signal) {
   const url = `https://suggestqueries.google.com/complete/search?client=firefox&ds=yt&q=${encodeURIComponent(query)}`;
-  const response = await fetch(url, { signal });
   if (!response.ok) throw new Error(`Suggest failed: ${response.status}`);
   const data = await response.json();
   // Response shape: ["query", ["suggestion1", "suggestion2", ...]]
@@ -939,10 +995,11 @@ io.on('connection', (socket) => {
     const room = roomManager.getRoom(roomId);
     if (!room || !room.members[socket.id]) return;
     if (!track || typeof track.name !== 'string' || !track.name.trim()
-      || !['youtube', 'audius', 'saavn', 'soundcloud', 'gaana'].includes(track.platform)
+      || !['youtube', 'ytmusic', 'audius', 'saavn', 'soundcloud', 'gaana'].includes(track.platform)
       || (track.url != null && (typeof track.url !== 'string'
         || (!/^https?:\/\//i.test(track.url)
-          && !(track.platform === 'saavn' && track.url.startsWith('/api/saavn/stream?')))))
+          && !(track.platform === 'saavn' && track.url.startsWith('/api/saavn/stream?'))
+          && !(track.platform === 'ytmusic' && track.url.startsWith('/api/youtube/audio/')))))
       || (track.uri != null && typeof track.uri !== 'string')) return;
     // Add streaming platform track to queue
     roomManager.enqueue(roomId, {
