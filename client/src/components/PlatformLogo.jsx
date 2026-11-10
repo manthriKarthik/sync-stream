@@ -51,15 +51,6 @@ function PlatformLogo({ platform, size = 18 }) {
           <circle cx="12" cy="12" r="1.8" fill="#fff" />
         </svg>
       );
-    // Direct audio link / podcast / internet-radio stream.
-    case 'url':
-      return (
-        <svg width={s} height={s} viewBox="0 0 24 24" aria-hidden="true">
-          <rect width="24" height="24" rx="6" fill="#0ea5e9" />
-          <path fill="none" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" d="M10.6 13.4a3 3 0 0 0 4.2 0l1.8-1.8a3 3 0 0 0-4.2-4.2l-.9.9" />
-          <path fill="none" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" d="M13.4 10.6a3 3 0 0 0-4.2 0l-1.8 1.8a3 3 0 0 0 4.2 4.2l.9-.9" />
-        </svg>
-      );
     // Uploaded local files (no platform) and any unknown source.
     case 'upload':
     case 'local':

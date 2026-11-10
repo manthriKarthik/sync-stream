@@ -11,7 +11,6 @@ import { Readable } from 'stream';
 import { fileURLToPath } from 'url';
 import 'dotenv/config';
 import { YouTube } from 'youtube-sr';
-import { Innertube } from 'youtubei.js';
 import { RoomManager } from './rooms.js';
 import { ClockSyncHandler } from './sync.js';
 
@@ -220,9 +219,6 @@ async function scrapeYouTubeSearch(query) {
         artist,
         album: '',
         albumArt,
-        // Direct audio stream (extracted + proxied below) so YouTube plays
-        // through the shared <audio> element — background/lock-screen capable.
-        url: `/api/youtube/stream/${v.videoId}`,
         duration: durationSec * 1000,
         durationText: durationText || formatDuration(durationSec),
         platform: 'youtube'
@@ -257,7 +253,6 @@ app.get('/api/youtube/search', async (req, res) => {
         artist: video.channel?.name || 'Unknown',
         album: '',
         albumArt: video.thumbnail?.url || `https://img.youtube.com/vi/${video.id}/mqdefault.jpg`,
-        url: `/api/youtube/stream/${video.id}`,
         duration: video.duration || 0,
         durationText: formatDuration(durationSec),
         platform: 'youtube'
@@ -268,109 +263,6 @@ app.get('/api/youtube/search', async (req, res) => {
     console.error('YouTube search error:', err.message);
     res.status(502).json({ error: 'YouTube search is unavailable. Please try again.' });
   }
-});
-
-// --- YouTube audio extraction (background/lock-screen playback) ---
-// The embedded YouTube iframe player is suspended by mobile browsers when the
-// screen locks or the app is backgrounded. To keep YouTube playing in those
-// cases (like Audius/Saavn do), we extract the underlying audio stream and serve
-// it so it plays through the shared <audio> element with full drift sync and
-// Media Session lock-screen controls. If extraction fails (e.g. a login-required
-// video, or YouTube throttling a cloud/datacenter IP), the endpoint returns 502
-// and the client falls back to the embedded iframe player.
-let innertubePromise = null;
-function getInnertube() {
-  if (!innertubePromise) {
-    // Optional auth: set YT_COOKIE (a logged-in youtube.com cookie string) to
-    // let the server extract audio for "login required" / age-restricted videos.
-    const opts = { retrieve_player: true };
-    if (process.env.YT_COOKIE) opts.cookie = process.env.YT_COOKIE;
-    if (process.env.YT_VISITOR_DATA) opts.visitor_data = process.env.YT_VISITOR_DATA;
-    innertubePromise = Innertube.create(opts)
-      .catch((err) => { innertubePromise = null; throw err; });
-  }
-  return innertubePromise;
-}
-
-// Cache fully-downloaded audio buffers so repeated HTTP Range requests (a single
-// <audio> playback makes many, and seeking makes more) are served instantly from
-// memory with correct 206 semantics — iOS Safari requires range support to play
-// at all. Oldest entries are evicted once the total cached size passes the cap.
-const ytAudioCache = new Map(); // videoId -> { buffer, mime, at }
-const ytAudioPending = new Map(); // videoId -> Promise<entry> (dedupe concurrent extracts)
-const YT_AUDIO_TTL = 30 * 60 * 1000;
-const YT_CACHE_MAX_BYTES = 250 * 1024 * 1024;
-
-function evictYouTubeCache() {
-  let total = 0;
-  for (const e of ytAudioCache.values()) total += e.buffer.length;
-  if (total <= YT_CACHE_MAX_BYTES) return;
-  const entries = [...ytAudioCache.entries()].sort((a, b) => a[1].at - b[1].at);
-  for (const [id, e] of entries) {
-    if (total <= YT_CACHE_MAX_BYTES) break;
-    ytAudioCache.delete(id);
-    total -= e.buffer.length;
-  }
-}
-
-async function getYouTubeAudio(videoId) {
-  const cached = ytAudioCache.get(videoId);
-  if (cached && Date.now() - cached.at < YT_AUDIO_TTL) { cached.at = Date.now(); return cached; }
-  if (ytAudioPending.has(videoId)) return ytAudioPending.get(videoId);
-  const task = (async () => {
-    const yt = await getInnertube();
-    // The iOS InnerTube client returns a direct, broadly-compatible AAC/MP4
-    // audio stream (plays in <audio>, incl. iOS Safari) without the signature
-    // deciphering the WEB client needs — which YouTube now frequently blocks.
-    const stream = await yt.download(videoId, { type: 'audio', quality: 'best', client: 'IOS' });
-    const chunks = [];
-    for await (const chunk of stream) chunks.push(Buffer.from(chunk));
-    const buffer = Buffer.concat(chunks);
-    if (!buffer.length) throw new Error('empty audio stream');
-    const entry = { buffer, mime: 'audio/mp4', at: Date.now() };
-    ytAudioCache.set(videoId, entry);
-    evictYouTubeCache();
-    return entry;
-  })().finally(() => ytAudioPending.delete(videoId));
-  ytAudioPending.set(videoId, task);
-  return task;
-}
-
-app.get('/api/youtube/stream/:videoId', async (req, res) => {
-  const videoId = req.params.videoId;
-  if (!/^[a-zA-Z0-9_-]{11}$/.test(videoId || '')) return res.status(400).end('bad id');
-  let entry;
-  try {
-    entry = await getYouTubeAudio(videoId);
-  } catch (err) {
-    console.error('YouTube audio extract error:', err.message);
-    // A non-2xx here tells the client to fall back to the embedded iframe player.
-    return res.status(502).end('extract failed');
-  }
-  const { buffer, mime } = entry;
-  const total = buffer.length;
-  res.setHeader('Content-Type', mime);
-  res.setHeader('Accept-Ranges', 'bytes');
-  res.setHeader('Cache-Control', 'public, max-age=1800');
-
-  const match = req.headers.range && /bytes=(\d*)-(\d*)/.exec(req.headers.range);
-  if (match) {
-    let start = match[1] ? parseInt(match[1], 10) : 0;
-    let end = match[2] ? parseInt(match[2], 10) : total - 1;
-    if (Number.isNaN(start)) start = 0;
-    if (Number.isNaN(end) || end >= total) end = total - 1;
-    if (start > end || start >= total) {
-      res.status(416).setHeader('Content-Range', `bytes */${total}`);
-      return res.end();
-    }
-    res.status(206);
-    res.setHeader('Content-Range', `bytes ${start}-${end}/${total}`);
-    res.setHeader('Content-Length', end - start + 1);
-    return res.end(buffer.subarray(start, end + 1));
-  }
-  res.status(200);
-  res.setHeader('Content-Length', total);
-  return res.end(buffer);
 });
 
 // Google's public YouTube autocomplete.
@@ -1046,11 +938,10 @@ io.on('connection', (socket) => {
     const room = roomManager.getRoom(roomId);
     if (!room || !room.members[socket.id]) return;
     if (!track || typeof track.name !== 'string' || !track.name.trim()
-      || !['youtube', 'audius', 'saavn', 'soundcloud', 'gaana', 'url'].includes(track.platform)
+      || !['youtube', 'audius', 'saavn', 'soundcloud', 'gaana'].includes(track.platform)
       || (track.url != null && (typeof track.url !== 'string'
         || (!/^https?:\/\//i.test(track.url)
-          && !(track.platform === 'saavn' && track.url.startsWith('/api/saavn/stream?'))
-          && !(track.platform === 'youtube' && track.url.startsWith('/api/youtube/stream/')))))
+          && !(track.platform === 'saavn' && track.url.startsWith('/api/saavn/stream?')))))
       || (track.uri != null && typeof track.uri !== 'string')) return;
     // Add streaming platform track to queue
     roomManager.enqueue(roomId, {

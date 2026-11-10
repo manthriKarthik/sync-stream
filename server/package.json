@@ -9,14 +9,12 @@
     "start": "node --openssl-legacy-provider index.js"
   },
   "dependencies": {
-    "@distube/ytdl-core": "^5.2.1",
     "cors": "^2.8.5",
     "dotenv": "^17.4.2",
     "express": "^4.18.2",
     "multer": "^2.0.2",
     "socket.io": "^4.7.4",
     "uuid": "^11.1.1",
-    "youtube-sr": "^4.3.12",
-    "youtubei.js": "^18.3.0"
+    "youtube-sr": "^4.3.12"
   }
 }
