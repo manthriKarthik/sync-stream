@@ -103,9 +103,19 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
   // Key (track.id||url) of the source currently loaded into the shared <audio>
   // element, so we never reload/restart a track that's already loaded.
   const lastLoadedUrlRef = useRef(null);
-  const unlockPlaybackEngines = (currentPlatform) => {
+  // YouTube tracks whose server-side audio extraction failed (by video id).
+  // These fall back to the embedded iframe player. Every other track — including
+  // a YouTube track with a working extracted stream url — plays through the
+  // shared <audio> element, which keeps playing while the phone is locked / the
+  // app is backgrounded (lock-screen controls + drift sync).
+  const [iframeFallback, setIframeFallback] = useState(() => new Set());
+  const needsIframe = (track) =>
+    !!track && track.platform === 'youtube'
+    && (!track.url || iframeFallback.has(track.uri));
+  const usesSharedAudio = (track) => !!track && !!track.url && !needsIframe(track);
+  const unlockPlaybackEngines = (track) => {
     localPlaybackPausedRef.current = false;
-    setSharedActive(currentPlatform !== 'youtube');
+    setSharedActive(usesSharedAudio(track));
   };
   // Remembers the last user seek so polling holds the bar at the tapped spot
   // until the platform player actually reports it (YouTube seeks asynchronously).
@@ -234,13 +244,13 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
       const nextTrack = queueRef.current[state.trackIndex];
       if (nextTrack) {
         setCurrentTrackIndex(state.trackIndex);
-        const isShared = nextTrack.platform !== 'youtube';
+        const isShared = usesSharedAudio(nextTrack);
         setSharedActive(isShared && !localPlaybackPausedRef.current);
         if (isShared) youtube.pause();
-        // Only feed the shared <audio> engine for direct-URL tracks (Audius /
-        // uploads). YouTube plays through its own SDK and must NOT
-        // pollute the shared audio element or they interfere with each other.
-        if (nextTrack.url && nextTrack.platform !== 'youtube') {
+        // Feed the shared <audio> engine for direct-URL tracks (Audius / Saavn /
+        // SoundCloud / uploads / extracted YouTube audio). An iframe-fallback
+        // YouTube track plays through the YouTube SDK instead.
+        if (isShared) {
           // Don't reload a source that's already loaded (e.g. the controller
           // just started it inside the tap gesture) — reloading restarts the
           // audio and snaps the progress bar back to 0.
@@ -280,7 +290,7 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
       socket.off('room:kicked', handleKicked);
       socket.off('playback:sync', handlePlaybackSync);
     };
-  }, [socket, isHost, isStreaming, currentTrackIndex, queue, onLeave]);
+  }, [socket, isHost, isStreaming, currentTrackIndex, queue, onLeave, iframeFallback]);
 
   // Clear the song-added toast timer on unmount.
   useEffect(() => () => {
@@ -288,14 +298,14 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
     if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
   }, []);
 
-  // Load initial track (handles both local and platform tracks)
+  // Load initial track (handles both shared-audio and iframe-fallback tracks)
   useEffect(() => {
     if (queue.length > 0 && queue[currentTrackIndex]) {
       const track = queue[currentTrackIndex];
-      if (track.platform === 'apple' || track.platform === 'youtube') {
-        // Platform tracks are played via their respective SDKs
-        // The sync event will trigger playback on each client
-      } else if (track.url) {
+      if (needsIframe(track)) {
+        // Iframe-fallback YouTube tracks play via the YouTube SDK; the sync
+        // event triggers playback on each client.
+      } else if (usesSharedAudio(track)) {
         // Only (re)load when the track actually changed. Otherwise adding a new
         // song to the queue re-runs this effect and reloads the shared <audio>,
         // which stops the song that's currently playing.
@@ -307,21 +317,21 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
         }
       }
     }
-  }, [queue, currentTrackIndex, loadTrack]);
+  }, [queue, currentTrackIndex, loadTrack, iframeFallback]);
 
   // Enforce ONE active player at a time so two songs never overlap when
-  // switching between a local (Audius/upload) track and a YouTube one.
+  // switching between a shared-audio track and an iframe-fallback YouTube one.
   useEffect(() => {
     const track = queue[currentTrackIndex];
     if (!track) return;
-    const isShared = track.platform !== 'youtube';
+    const isShared = usesSharedAudio(track);
     // Silence/allow the shared <audio> engine based on the active track type.
     setSharedActive(isShared && !localPlaybackPausedRef.current);
     if (isShared) {
       try { youtube.pause(); } catch (_) { /* ignore */ }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentTrackIndex, queue]);
+  }, [currentTrackIndex, queue, iframeFallback]);
 
   // Handle platform track sync (when server broadcasts play for a platform track)
   useEffect(() => {
@@ -341,7 +351,7 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
       pendingPlatformRef.current = null;
       if (unchanged || localPlaybackPausedRef.current) return;
 
-      if (track.platform === 'youtube') {
+      if (needsIframe(track)) {
         if (state.playing) {
           // Skip if this device just started the video from a tap gesture —
           // re-issuing playTrack now would interrupt the fresh load and leave it
@@ -357,7 +367,7 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
 
     socket.on('playback:sync', handlePlatformSync);
     return () => socket.off('playback:sync', handlePlatformSync);
-  }, [socket, queue, youtube, clockOffset]);
+  }, [socket, queue, youtube, clockOffset, iframeFallback]);
 
   // Apply any pending platform playback once the queue/track becomes available.
   // Fixes a device (2nd/3rd listener) that joined mid-song and received the
@@ -374,13 +384,13 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
     const track = queue[state.trackIndex];
     if (!track) return;
     pendingPlatformRef.current = null; // apply once; ongoing alignment is handled by the drift effect
-    if (track.platform === 'youtube') {
+    if (needsIframe(track)) {
       if (!justStartedInGesture(track.uri)) {
         youtube.playTrack(track.uri, computePlatformPosition(state));
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [queue, currentTrackIndex]);
+  }, [queue, currentTrackIndex, iframeFallback]);
 
   // Poll the active platform player so the progress bar keeps moving for
   // YouTube tracks (they don't use the shared <audio> element).
@@ -405,7 +415,7 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
 
     let intervalId;
 
-    if (track.platform === 'youtube') {
+    if (needsIframe(track)) {
       intervalId = setInterval(() => {
         const d = youtube.getDuration();
         const local = youtube.getPosition();
@@ -442,14 +452,14 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
       if (intervalId) clearInterval(intervalId);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [queue, currentTrackIndex]);
+  }, [queue, currentTrackIndex, iframeFallback]);
 
   // Keep YouTube aligned across devices. YouTube players start slightly apart
   // and drift over time, so periodically re-seek to the synced position when
   // the gap grows past ~1s. This reduces the latency between listeners.
   useEffect(() => {
     const track = queue[currentTrackIndex];
-    if (!track || track.platform !== 'youtube') return;
+    if (!needsIframe(track)) return;
 
     const id = setInterval(() => {
       const state = platformStateRef.current;
@@ -467,7 +477,7 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
 
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [queue, currentTrackIndex]);
+  }, [queue, currentTrackIndex, iframeFallback]);
 
   const ytStatusRef = useRef({ needsGesture: false, isVideoPlaying: false });
   ytStatusRef.current = {
@@ -478,7 +488,7 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
   };
   useEffect(() => {
     const track = queue[currentTrackIndex];
-    if (!track || track.platform !== 'youtube') return;
+    if (!needsIframe(track)) return;
 
     const id = setInterval(() => {
       const state = platformStateRef.current;
@@ -501,12 +511,12 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
 
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [queue, currentTrackIndex]);
+  }, [queue, currentTrackIndex, iframeFallback]);
 
   useEffect(() => {
     if (audioNeedsGesture) return;
     const track = queue[currentTrackIndex];
-    const isShared = track && !!track.url && track.platform !== 'youtube';
+    const isShared = usesSharedAudio(track);
     if (!isShared) return;
 
     const id = setInterval(() => {
@@ -522,7 +532,36 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
 
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [queue, currentTrackIndex, audioNeedsGesture]);
+  }, [queue, currentTrackIndex, audioNeedsGesture, iframeFallback]);
+
+  // If a YouTube track's extracted audio stream fails to load in the shared
+  // <audio> element (e.g. the server could not extract it, or YouTube throttled
+  // a cloud IP), fall back to the embedded iframe player for that track so it
+  // still plays.
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    const handleError = () => {
+      const track = queueRef.current[currentTrackIndex];
+      if (!track || track.platform !== 'youtube' || !track.url) return;
+      if (iframeFallback.has(track.uri)) return;
+      setIframeFallback((prev) => {
+        const next = new Set(prev);
+        next.add(track.uri);
+        return next;
+      });
+      lastLoadedUrlRef.current = null;
+      setSharedActive(false);
+      const ps = platformStateRef.current;
+      setPlatformPlaying(!!ps?.playing);
+      if (ps?.playing && !localPlaybackPausedRef.current && !document.hidden) {
+        youtube.playTrack(track.uri, computePlatformPosition(ps), false);
+      }
+    };
+    audio.addEventListener('error', handleError);
+    return () => audio.removeEventListener('error', handleError);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentTrackIndex, iframeFallback]);
 
   // joins mid-song (2nd, 3rd, ... listener) starts playing in sync instead of
   // sitting silent until the next host action.
@@ -536,7 +575,7 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
 
   // YouTube tracks report progress via their own player, not the shared <audio>
   const activeTrack = queue[currentTrackIndex] || null;
-  const isPlatformTrack = activeTrack?.platform === 'youtube';
+  const isPlatformTrack = needsIframe(activeTrack);
 
   // When there is no active track (empty queue or the playing song was removed),
   // fully stop the shared audio and any platform player so the player bar does
@@ -555,7 +594,7 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
     if (!canControl) return;
     // Also unlock YouTube + enable the auto-resume loops so a YouTube track
     // resumes on this device even if it wasn't started by a direct tap.
-    unlockPlaybackEngines(activeTrack?.platform);
+    unlockPlaybackEngines(activeTrack);
     // For YouTube tracks the shared <audio> currentTime is meaningless,
     // so resume from the real platform position instead of snapping to 0/stale.
     const position = isPlatformTrack
@@ -593,19 +632,19 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
     // This tap is a user gesture — unlock the audio engines so a later
     // auto-advanced track (esp. YouTube) plays on this device without a manual
     // tap, and so the auto-resume retry loops become active.
-    unlockPlaybackEngines(track.platform);
+    unlockPlaybackEngines(track);
     // Snap the progress bar back to the start instantly instead
     // of leaving it at the previous song's position until polling catches up.
     setPlatformProgress({ time: 0, duration: track.duration ? track.duration / 1000 : 0 });
-    const isSharedTrack = !!track.url && track.platform !== 'youtube';
+    const isSharedTrack = usesSharedAudio(track);
     // Stop every OTHER engine right away so the previous song (which may run on a
     // different engine — e.g. switching a YouTube song to a Saavn one) doesn't
     // keep playing/overlapping during the socket round-trip. Only the engine for
     // the new track is left running.
     try { if (!isSharedTrack) setSharedActive(false); } catch (_) { /* ignore */ }
-    if (track.platform !== 'youtube') { try { youtube.pause(); } catch (_) { /* ignore */ } }
+    if (!needsIframe(track)) { try { youtube.pause(); } catch (_) { /* ignore */ } }
 
-    if (track.platform === 'youtube') {
+    if (needsIframe(track)) {
       recentGestureLoadRef.current = { videoId: track.uri, at: Date.now() };
       youtube.playTrack(track.uri, 0, true);
     } else if (isSharedTrack) {
@@ -732,7 +771,7 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
 
   const handleResumeAudio = () => {
     localPlaybackPausedRef.current = false;
-    setSharedActive(queue[currentTrackIndex]?.platform !== 'youtube');
+    setSharedActive(usesSharedAudio(queue[currentTrackIndex]));
     // NOTE: do NOT prime the shared <audio> with play().then(pause) here — that
     // pause fires asynchronously and would silence the track we start below,
     // which was why a joining listener heard nothing until the host toggled
@@ -743,9 +782,9 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
     // position is corrected precisely.
     const ps = platformStateRef.current || roomState?.playbackState;
     const track = queue[currentTrackIndex];
-    if (track?.platform === 'youtube' && ps?.playing) {
+    if (needsIframe(track) && ps?.playing) {
       youtube.playTrack(track.uri, computePlatformPosition(ps), true);
-    } else if (track?.url && ps?.playing) {
+    } else if (usesSharedAudio(track) && ps?.playing) {
       // Shared audio (Saavn / Audius / uploads): start it within this gesture
       // so mobile listeners actually hear it. Seek to the synced position first
       // so we join exactly where the room is, then play.
@@ -769,8 +808,8 @@ function Room({ socket, roomState, setRoomState, username, userId, onLeave, conn
 
   const handleYouTubeTap = () => {
     const track = queue[currentTrackIndex];
-    if (!track || track.platform !== 'youtube') return;
-    unlockPlaybackEngines('youtube');
+    if (!needsIframe(track)) return;
+    unlockPlaybackEngines(track);
     recentGestureLoadRef.current = { videoId: track.uri, at: Date.now() };
     youtube.playTrack(track.uri, computePlatformPosition(platformStateRef.current), true);
     if (socket && roomState?.id) {

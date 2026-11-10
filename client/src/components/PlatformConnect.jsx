@@ -9,6 +9,7 @@ const TABS = [
   { id: 'saavn', label: 'Saavn' },
   { id: 'soundcloud', label: 'SoundCloud' },
   { id: 'youtube', label: 'YouTube' },
+  { id: 'url', label: 'Link' },
   { id: 'upload', label: 'Upload' }
 ];
 
@@ -20,6 +21,7 @@ function PlatformConnect({ youtube, audius, saavn, soundcloud, roomId, userId, o
   const [activeTab, setActiveTab] = useState('audius');
   const [showPanel, setShowPanel] = useState(true);
   const [youtubeUrl, setYoutubeUrl] = useState('');
+  const [directUrl, setDirectUrl] = useState('');
   const searchIdRef = useRef(0);
   const [searchError, setSearchError] = useState('');
   const [searched, setSearched] = useState(false);
@@ -95,6 +97,7 @@ function PlatformConnect({ youtube, audius, saavn, soundcloud, roomId, userId, o
         artist: '',
         album: '',
         albumArt: `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`,
+        url: `/api/youtube/stream/${videoId}`,
         duration: null,
         platform: 'youtube'
       });
@@ -102,6 +105,32 @@ function PlatformConnect({ youtube, audius, saavn, soundcloud, roomId, userId, o
     } else {
       setSearchError('Enter a valid YouTube video URL.');
     }
+  };
+
+  // Add a direct audio link (podcast, internet radio, or any .mp3/.aac/.m3u8
+  // stream). It plays through the shared <audio> engine, so it keeps playing
+  // while the phone is locked / the app is backgrounded.
+  const handleDirectUrl = (e) => {
+    e.preventDefault();
+    if (!connected || !directUrl.trim()) return;
+    let parsed;
+    try { parsed = new URL(directUrl.trim()); } catch { setSearchError('Enter a valid audio URL (http/https).'); return; }
+    if (!/^https?:$/.test(parsed.protocol)) { setSearchError('Only http(s) audio links are supported.'); return; }
+    const file = decodeURIComponent(parsed.pathname.split('/').filter(Boolean).pop() || '');
+    const name = (file ? file.replace(/\.[a-z0-9]+$/i, '') : parsed.hostname) || 'Audio stream';
+    onTrackSelected({
+      id: `url-${Date.now()}`,
+      uri: parsed.href,
+      name,
+      artist: parsed.hostname,
+      album: '',
+      albumArt: null,
+      url: parsed.href,
+      duration: null,
+      platform: 'url'
+    });
+    setDirectUrl('');
+    setSearchError('');
   };
 
   if (!showPanel) {
@@ -240,6 +269,32 @@ function PlatformConnect({ youtube, audius, saavn, soundcloud, roomId, userId, o
             searching={searching}
             provider="youtube"
           />
+        </div>
+      )}
+
+      {/* Direct link / podcast / internet radio */}
+      {activeTab === 'url' && (
+        <div>
+          <p style={{ fontSize: 12, color: 'var(--success)', marginBottom: 6 }}>
+            ✓ Any direct audio link • podcasts • internet radio • plays in background
+          </p>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
+            Paste a direct .mp3 / .aac / .m3u8 stream or a radio URL. Web-page links
+            (Spotify, a YouTube watch page) won't work here — only direct audio.
+          </p>
+          <form onSubmit={handleDirectUrl} style={{ display: 'flex', gap: 8 }}>
+            <input
+              className="input"
+              type="url"
+              placeholder="https://.../stream.mp3"
+              value={directUrl}
+              onChange={(e) => setDirectUrl(e.target.value)}
+              style={{ fontSize: 12 }}
+            />
+            <button className="btn btn-primary" type="submit" disabled={!connected || !directUrl.trim()} style={{ whiteSpace: 'nowrap', fontSize: 12 }}>
+              {queueEmpty && canControl ? '▶ Play' : '+ Add'}
+            </button>
+          </form>
         </div>
       )}
 
